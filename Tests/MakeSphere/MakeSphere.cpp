@@ -7,6 +7,7 @@
 #include <lsMakeGeometry.hpp>
 #include <lsPrune.hpp>
 #include <lsReduce.hpp>
+#include <lsToDiskMesh.hpp>
 #include <lsToMesh.hpp>
 #include <lsToSurfaceMesh.hpp>
 #include <lsToVoxelMesh.hpp>
@@ -73,6 +74,9 @@ int main() {
   lsToVoxelMesh<double, D>(levelSet, mesh).apply();
   mesh->print();
   lsVTKWriter(mesh, lsFileFormatEnum::VTU, "Sphere.vtu").apply();
+
+  lsToDiskMesh<double, D>(levelSet, mesh).apply();
+  lsVTKWriter(mesh, lsFileFormatEnum::VTU, "Disk.vtu").apply();
 
   return 0;
 }
