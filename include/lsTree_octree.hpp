@@ -128,14 +128,12 @@ public:
     return (D == 2) ? "Quadtree" : "Octree";
   }
 
-
   void printInfo(){
       std::cout << getTreeType() << std::endl;
       std::cout << "binSize: " << binSize << std::endl;
       std::cout << "numChildren: " << numChildren << std::endl;
       std::cout << "minSizePerDirection: " << minSizePerDirection << std::endl;
       std::cout << "minSizeGrid: " << minSizeGrid << std::endl << std::endl;
-      std::cout << "num points N << 2^D? : " << totalPoints <<
   };
 
 };
