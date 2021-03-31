@@ -43,9 +43,10 @@ int main(int argc, char** argv) {
   auto tree = lsTree<double, D>(mesh);
   tree.apply();
   lsVTKWriter(mesh, lsFileFormatEnum::VTU, "Tree.vtu").apply();
+  // TODO: remove verbose test output and replace with SUCCESS/FAIL style output
   tree.printInfo();
   tree.printTree();
-  tree.printTree2();
+  tree.printTreeByLevel();
 
   std::cout << "DiskMesh: " << std::endl;
   lsToDiskMesh<double, D>(levelSet, mesh).apply();
@@ -55,9 +56,10 @@ int main(int argc, char** argv) {
   tree = lsTree<double, D>(mesh);
   tree.apply();
   lsVTKWriter(mesh, lsFileFormatEnum::VTU, "Tree.vtu").apply();
+  // TODO: remove verbose test output and replace with SUCCESS/FAIL style output
   tree.printInfo();
   tree.printTree();
-  tree.printTree2();
+  tree.printTreeByLevel();
   
   std::cout << "Test " << argv[0] << ": SUCCESS!";
   return 0;

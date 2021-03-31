@@ -28,7 +28,7 @@ T pointDistance(Iter_T first, Iter_T last, Iter2_T first2)
 
 /// Tree structure that seperates a domain
 ///
-///
+/// TODO: clean up parameters, member functions and attributes
 ///
 /// Maximum depth is 4?
 template <class T, int D>
@@ -36,12 +36,12 @@ class lsTree
 {
 public:
   using point_type = std::array<T, 3>;
-  typedef typename std::array<T, 3> point_type2;
+  // typedef typename std::array<T, 3> point_type2;
 
 private:
   // The mesh we're building a tree for
   lsSmartPointer<lsMesh<T>> mesh = nullptr;
-  lsSmartPointer<lsMesh<T>> newMesh = nullptr;
+  // lsSmartPointer<lsMesh<T>> newMesh = nullptr;
 
   // PARAMETERS
   std::string tree_type = "kd-Tree";
@@ -59,11 +59,12 @@ private:
     size_t stop = 0;
     size_t level = 0;
     size_t size = 0;
-    point_type center;
-    point_type minimumExtent;
-    point_type maximumExtent;
     lsSmartPointer<node> left = nullptr;
     lsSmartPointer<node> right = nullptr;
+
+    point_type center; // unused for now
+    point_type minimumExtent;
+    point_type maximumExtent;
 
     // node(const point_type& ct, const point_type& tl, const point_type& br) : center(ct), extent({tl, br}) left(nullptr), right(nullptr) {
     // }
@@ -75,20 +76,11 @@ private:
     {
     }
 
-    node(const point_type &ct, const point_type &tl, const point_type &br) : center(ct)
-    {
-    }
-
     void setRange(size_t newStart, size_t newStop)
     {
       start = newStart;
       stop = newStop;
       size = stop - start;
-    }
-
-    size_t getSize()
-    {
-      return size;
     }
 
     void setCenter(point_type ct_point)
@@ -114,14 +106,15 @@ private:
       return pointDistance<T>(center.begin(), center.end(), pt.begin());
     }
 
-    void split()
-    {
-      left = lsSmartPointer<node>::New();
-      size_t med = (stop - start) / 2;
-      left->setRange(start, med);
-      right = lsSmartPointer<node>::New();
-      right->setRange(med, stop);
-    }
+    /// Unused (from discarded attempt)
+    // void split()
+    // {
+    //   left = lsSmartPointer<node>::New();
+    //   size_t med = (stop - start) / 2;
+    //   left->setRange(start, med);
+    //   right = lsSmartPointer<node>::New();
+    //   right->setRange(med, stop);
+    // }
   };
   lsSmartPointer<node> root = nullptr;
   std::vector<lsSmartPointer<node>> nodes;
@@ -177,8 +170,13 @@ public:
 
     size_t index = 0;
     root = build(begin, 0, N, 0, index);
+    numBins = ipower(2, depth);
   }
 
+  /// builds a node of the tree and returns a pointer 
+  /// 
+  /// checks if it should be a leaf node
+  /// TODO: add partitioning of vector/mesh-nodes
   template <class VectorIt>
   lsSmartPointer<node> build(VectorIt begin, size_t start, size_t stop, size_t level, size_t &index)
   {
@@ -188,6 +186,7 @@ public:
     if (level > maxDepth)
       return nullptr;
     size_t halfSize = size / 2;
+    // TODO: add partitioning of vector/mesh-nodes
     // std::nth_element(begin, begin+halfSize, begin+size); // doesn't work cause we have triples here!
     // partitionInDimension(dim, begin+start, begin+stop, begin[halfSize]);
     size_t nextLevel = (level + 1);
@@ -204,6 +203,10 @@ public:
     return thisNode;
   }
 
+  /// [WIP] query the tree based on a single point
+  /// 
+  /// checks if it should be a leaf node
+  /// TODO: TEST
   const lsSmartPointer<node> nearest(const point_type &pt)
   {
     if (root == nullptr)
@@ -245,6 +248,7 @@ public:
     return tree_type;
   }
 
+  /// prints parameters
   void printInfo()
   {
     std::cout << getTreeType() << std::endl;
@@ -255,6 +259,7 @@ public:
     std::cout << "maxPointsPerBin: " << maxPointsPerBin << std::endl;
   };
 
+  /// prints tree by simply going through nodes-vector
   void printTree()
   {
     for (size_t i = 0; i < nodes.size(); ++i)
@@ -264,7 +269,8 @@ public:
     }
   };
 
-  void printTree2()
+  /// prints tree one level per line at a time
+  void printTreeByLevel()
   {
     for (size_t level = 0; level <= depth; ++level)
     {
