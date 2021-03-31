@@ -18,7 +18,7 @@
 /// This allows for a simple setup of disks for ray tracing.
 template <class T, int D, class N = T> class lsToDiskMesh {
   typedef typename lsDomain<T, D>::DomainType hrleDomainType;
-
+public: //TODO: REMOVE THIS!!!!
   lsSmartPointer<lsDomain<T, D>> levelSet = nullptr;
   lsSmartPointer<lsMesh<N>> mesh = nullptr;
   T maxValue = 0.5;

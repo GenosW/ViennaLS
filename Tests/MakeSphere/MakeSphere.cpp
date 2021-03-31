@@ -76,6 +76,7 @@ int main() {
   lsVTKWriter<double>(mesh, lsFileFormatEnum::VTU, "Sphere.vtu").apply();
 
   lsToDiskMesh<double, D>(levelSet, mesh).apply();
+  mesh->print();
   lsVTKWriter(mesh, lsFileFormatEnum::VTU, "Disk.vtu").apply();
 
   return 0;

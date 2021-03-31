@@ -1,143 +1,283 @@
 //#define LS_TREE
 #ifndef LS_TREE
 #define LS_TREE
+#include <algorithm>
+#include <iterator>
 #include <vector>
 #include <lsToDiskMesh.hpp>
-#include <math.h>
+#include <lsSmartPointer.hpp>
 
-// (x > 0) : (x < 0) -> Close : Far
-// (y > 0) : (y < 0) -> Right : Left
-// (z > 0) : (z < 0) -> Top : Bottom
-// The direction/Reihenfolge of these numbers might need tweaking!
-#define CRT 0    // close right top <--> (x>0) && (y>0) && (z>0)
-#define FRT 1    // far right top   <--> (x<0) && (y>0) && (z>0)
-#define FLT 2    // far left top    <--> (x<0) && (y<0) && (z>0)
-#define CLT 3    // close left top  <--> (x>0) && (y<0) && (z>0)
-#define CRB 4    // close right bot <--> (x>0) && (y>0) && (z<0)
-#define FRB 5    // far right bot   <--> (x<0) && (y>0) && (z<0)
-#define FLB 6    // far left bot    <--> (x<0) && (y<0) && (z<0)
-#define CLB 7    // close left bot  <--> (x>0) && (y<0) && (z<0)
+inline int ipower(int N, int exp) { return (exp > 1) ? N * ipower(N, exp - 1) : N; };
 
-inline int ipower(int N, int exp) {return (exp>1) ? N*ipower(N, exp-1) : N;};
+template <class Type>
+struct SqrDiff
+{
+  Type operator()(Type x, Type y) const
+  {
+    return (x - y) * (x - y);
+  }
+};
 
-// template <int Dim=3> struct domain {
-//   std::vector<int> data;
-
-//   domain(int N){
-//     size_t S = ipower(N, Dim);
-//     data.reserve(S);
-//     int start = 0;
-//     auto next_value = [&start] () {return start++;};
-//     std::generate(data.begin(), data.end(), next_value);
-//   }
-
-//   size_t size() {
-//     return data.size();
-//   }
-// };
+template <typename T, class Iter_T, class Iter2_T>
+T pointDistance(Iter_T first, Iter_T last, Iter2_T first2)
+{
+  T ret = inner_product(first, last, first2, 0.0,
+                        std::plus<T>(), SqrDiff<T>());
+  return ret > 0.0 ? sqrt(ret) : 0.0;
+}
 
 /// Tree structure that seperates a domain
-/// Tree type is based on dimension:
-///   - D=2... Quadtree
-///   - D=3... Octree
+///
+///
+///
 /// Maximum depth is 4?
-template <class T, int D> class lsTree { 
-  lsSmartPointer<lsToDiskMesh> mesh = nullptr;
-  lsSmartPointer<lsDomain<T, D>> domain = nullptr;
+template <class T, int D>
+class lsTree
+{
+public:
+  using point_type = std::array<T, 3>;
+  typedef typename std::array<T, 3> point_type2;
+
+private:
+  // The mesh we're building a tree for
+  lsSmartPointer<lsMesh<T>> mesh = nullptr;
+  lsSmartPointer<lsMesh<T>> newMesh = nullptr;
 
   // PARAMETERS
+  std::string tree_type = "kd-Tree";
+  int depth = 0;
+  int numBins = 1; // numBins = 2^depth
   // TODO: Validate the maxDepth setting. Too deep/too shallow/just right?
   int maxDepth = 4;
-  // TODO: Rectangular grid???
-  
-  int pointsPerDim = 20;
-  // TODO: (BR) Reduce number of parameters to minimum needed.
-  // They are here to have something to look at and have default values.
-  // Remove before 'release'
-  int binSize = ipower(20, D);
-  int numChildren = ipower(2, D);
-  int minSizePerDirection = pointsPerDim * 2;
-  int minSizeGrid = numChildren * binSize;
+  int maxNumBins = ipower(2, maxDepth);
+  int maxPointsPerBin = 10;
 
-  // lsTree node
-  struct Node {
-    // 
-    //coords boundary;
-    // Children
-    // Vector of trees for scalability
-    // Access via integer index or DEFINES above
-    std::vector<lsSmartPointer<lsPointData>> points; // length = numChildren
-    std::vector<lsSmartPointer<Node>> children; // length = numChildren
-    bool hasChildren;
+  struct node
+  {
+    // std::vector<point_type> points;
+    size_t start = 0;
+    size_t stop = 0;
+    size_t level = 0;
+    size_t size = 0;
+    point_type center;
+    point_type minimumExtent;
+    point_type maximumExtent;
+    lsSmartPointer<node> left = nullptr;
+    lsSmartPointer<node> right = nullptr;
 
-    void split() {
-      hasChildren = true:
-      children.assign(numChildren);
+    // node(const point_type& ct, const point_type& tl, const point_type& br) : center(ct), extent({tl, br}) left(nullptr), right(nullptr) {
+    // }
+    node()
+    {
     }
 
-    void makeLeaf() {
-      hasChildren = false;
+    node(const point_type &ct) : center(ct)
+    {
     }
 
-    void storePoint() {
-      // Add to points
+    node(const point_type &ct, const point_type &tl, const point_type &br) : center(ct)
+    {
     }
 
-    bool contains(lsPointData point) {
-      // Check if Node contains the point based on boundary
-      return false;
+    void setRange(size_t newStart, size_t newStop)
+    {
+      start = newStart;
+      stop = newStop;
+      size = stop - start;
     }
-  }
-  Node* root; // TODO: (BR) Convert to proper pointer
+
+    size_t getSize()
+    {
+      return size;
+    }
+
+    void setCenter(point_type ct_point)
+    {
+      center = ct_point;
+    }
+
+    point_type &getCenter() const
+    {
+      return center;
+    }
+
+    bool isWithin(const point_type &pt)
+    {
+      for (size_t i = 0; i < 3; ++i)
+        if (pt[i] < minimumExtent || pt[i] > maximumExtent)
+          return false;
+      return true;
+    }
+
+    T distance(const point_type &pt)
+    {
+      return pointDistance<T>(center.begin(), center.end(), pt.begin());
+    }
+
+    void split()
+    {
+      left = lsSmartPointer<node>::New();
+      size_t med = (stop - start) / 2;
+      left->setRange(start, med);
+      right = lsSmartPointer<node>::New();
+      right->setRange(med, stop);
+    }
+  };
+  lsSmartPointer<node> root = nullptr;
+  std::vector<lsSmartPointer<node>> nodes;
 
   // Methods
   // void build() {}
-  // bool split() {}
-  // bool insert(point) {}
-  // region query(point) {}
-  // regions query(boundary) {}
 
 public:
   lsTree() {}
 
-  lsTree(lsSmartPointer<lsDomain<T, D>> passedDomain,
-               lsSmartPointer<lsToDiskMesh> passedMesh)
-      : domain(passedDomain), mesh(passedMesh) {
-      }
+  lsTree(lsSmartPointer<lsMesh<T>> passedMesh)
+      : mesh(passedMesh) {}
+
+  void setMesh(lsSmartPointer<lsMesh<T>> passedMesh)
+  {
+    mesh = passedMesh;
+  }
 
   //~lsTree() {}
 
-  /// static build --> no need to restructure since grid doesn't change?
-  void build() {
-    
-    // TODO: Implement build
+  /// entry point
+  void apply()
+  {
+    if (mesh == nullptr)
+    {
+      lsMessage::getInstance()
+          .addWarning("No mesh was passed to lsTree.")
+          .print();
+      return;
+    }
+    nodes.reserve(maxNumBins);
+    // partition in x by median
+    size_t N = mesh->getNodes().size();
+    size_t medianPos = size_t(N / 2);
 
-    // 1. Check how many points the current node represents
-    // 2. If too large, split into quadrants
-    // 2. 
+    std::cout << "N: " << N << std::endl;
+    std::cout << "medianPos: " << medianPos << std::endl;
+
+    auto begin = mesh->getNodes().begin();
+    auto end = mesh->getNodes().end();
+
+    std::cout << "Partitioning... " << std::endl;
+    // std::vector<point_type> below(begin, begin + medianPos);
+    // std::vector<point_type> above(begin + medianPos, end);
+    std::vector<T> below(medianPos, 0.);
+    std::vector<T> above(medianPos, 1.);
+    std::cout << "below.size: " << below.size() << std::endl;
+    std::cout << "above.size: " << above.size() << std::endl;
+    // mesh->insertNextVectorData(below, "below");
+    // mesh->insertNextVectorData(above, "above");
+    mesh->insertNextScalarData(below, "below");
+    mesh->insertNextScalarData(above, "above");
+
+    size_t index = 0;
+    root = build(begin, 0, N, 0, index);
   }
 
-  bool insert(lsPointData point) {
-    //
+  template <class VectorIt>
+  lsSmartPointer<node> build(VectorIt begin, size_t start, size_t stop, size_t level, size_t &index)
+  {
+    size_t size = stop - start;
+    if (size < maxPointsPerBin)
+      return nullptr;
+    if (level > maxDepth)
+      return nullptr;
+    size_t halfSize = size / 2;
+    // std::nth_element(begin, begin+halfSize, begin+size); // doesn't work cause we have triples here!
+    // partitionInDimension(dim, begin+start, begin+stop, begin[halfSize]);
+    size_t nextLevel = (level + 1);
+    depth = (depth < level) ? level : depth;
+    size_t thisIndex = index;
+    index += 1;
+    auto thisNode = lsSmartPointer<node>::New();
+    nodes.push_back(thisNode);
+    thisNode->setRange(start, stop);
+    thisNode->level = level;
+    thisNode->left = build(begin, start, start + halfSize, nextLevel, index);
+    thisNode->right = build(begin, start + halfSize, stop, nextLevel, index);
+
+    return thisNode;
   }
+
+  const lsSmartPointer<node> nearest(const point_type &pt)
+  {
+    if (root == nullptr)
+    {
+      lsMessage::getInstance()
+          .addWarning("lsTree was not built. Returning pt.")
+          .print();
+      return nullptr;
+    }
+
+    lsSmartPointer<node> thisNode = root;
+    while (thisNode->left != nullptr)
+      thisNode = (thisNode->left->isWithin(pt)) ? thisNode->left : thisNode->right;
+    return thisNode;
+  }
+
+  // template <class VectorIt>
+  // size_t partitionInDimension(size_t dim, VectorIt begin, VectorIt end, size_t median)
+  // {
+  //   std::partition(begin, end, [dim, median](const auto &pos) { return pos[dim] < median; })
+  //   return std::distance(begin, end) / 2
+  // }
+
+  // bool isWithinExtent(point_type &pt)
+  // {
+  //   for (size_t i = 0; i < pt.size(); ++i)
+  //   {
+  //     if (pt[i] < mesh->minimumExtent[i] || pt[i] > mesh->maximumExtent[i])
+  //       return false;
+  //   }
+  //   return true;
+  // }
 
   /*
   * ---- DEBUG FUNCTIONS ---- *
   */
-  const char* getTreeType() {
-    return (D == 2) ? "Quadtree" : "Octree";
+  const std::string getTreeType()
+  {
+    return tree_type;
   }
 
-
-  void printInfo(){
-      std::cout << getTreeType() << std::endl;
-      std::cout << "binSize: " << binSize << std::endl;
-      std::cout << "numChildren: " << numChildren << std::endl;
-      std::cout << "minSizePerDirection: " << minSizePerDirection << std::endl;
-      std::cout << "minSizeGrid: " << minSizeGrid << std::endl << std::endl;
-      std::cout << "num points N << 2^D? : " << totalPoints <<
+  void printInfo()
+  {
+    std::cout << getTreeType() << std::endl;
+    std::cout << "depth: " << depth << std::endl;
+    std::cout << "numBins: " << numBins << std::endl;
+    std::cout << "maxDepth: " << maxDepth << std::endl;
+    std::cout << "maxNumBins: " << maxNumBins << std::endl;
+    std::cout << "maxPointsPerBin: " << maxPointsPerBin << std::endl;
   };
 
+  void printTree()
+  {
+    for (size_t i = 0; i < nodes.size(); ++i)
+    {
+      std::string leaf = (nodes[i]->left == nullptr && nodes[i]->right == nullptr) ? "#" : "";
+      std::cout << "node " << std::setw(3) << i << "(L" << nodes[i]->level << "): [" << nodes[i]->start << ", " << nodes[i]->stop << ")" << leaf << std::endl;
+    }
+  };
+
+  void printTree2()
+  {
+    for (size_t level = 0; level <= depth; ++level)
+    {
+      std::cout << "L" << level << ": ";
+      for (size_t i = 0; i < nodes.size(); ++i)
+      {
+        if (nodes[i]->level != level)
+          continue;
+        std::cout << std::setw(3) << i << "[" << nodes[i]->start << ", " << nodes[i]->stop << ") --- ";
+      }
+      std::cout << std::endl;
+    }
+  };
 };
 
 #endif // LS_TREE
