@@ -42,7 +42,7 @@ int main(int argc, char** argv) {
 
   auto tree = lsTree<double, D>(mesh);
   tree.apply();
-  lsVTKWriter(mesh, lsFileFormatEnum::VTU, "Tree.vtu").apply();
+  lsVTKWriter(mesh, lsFileFormatEnum::VTU, "TreeMesh.vtu").apply();
   // TODO: remove verbose test output and replace with SUCCESS/FAIL style output
   tree.printInfo();
   tree.printTree();
@@ -55,7 +55,7 @@ int main(int argc, char** argv) {
   std::cout << "VTKWriter --> Disk.vtu: DONE" << std::endl;
   tree = lsTree<double, D>(mesh);
   tree.apply();
-  lsVTKWriter(mesh, lsFileFormatEnum::VTU, "Tree.vtu").apply();
+  lsVTKWriter(mesh, lsFileFormatEnum::VTU, "TreeDiskMesh.vtu").apply();
   // TODO: remove verbose test output and replace with SUCCESS/FAIL style output
   tree.printInfo();
   tree.printTree();

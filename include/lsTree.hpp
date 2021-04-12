@@ -4,8 +4,20 @@
 #include <algorithm>
 #include <iterator>
 #include <vector>
+#include <cstdint>
 #include <lsToDiskMesh.hpp>
 #include <lsSmartPointer.hpp>
+
+constexpr int64_t ipow(int64_t base, int exp, int64_t result = 1)
+{
+  return exp < 1 ? result : ipow(base * base, exp / 2, (exp % 2) ? result * base : result);
+}
+
+// all depth values are known at compile time
+constexpr int64_t pow2(int exp)
+{
+  return 1 << exp;
+}
 
 inline int ipower(int N, int exp) { return (exp > 1) ? N * ipower(N, exp - 1) : N; };
 
@@ -42,6 +54,10 @@ private:
   // The mesh we're building a tree for
   lsSmartPointer<lsMesh<T>> mesh = nullptr;
   // lsSmartPointer<lsMesh<T>> newMesh = nullptr;
+  std::vector<size_t> x;
+  std::vector<size_t> y;
+  std::vector<size_t> z;
+  std::vector<T> color;
 
   // PARAMETERS
   std::string tree_type = "kd-Tree";
@@ -49,7 +65,7 @@ private:
   int numBins = 1; // numBins = 2^depth
   // TODO: Validate the maxDepth setting. Too deep/too shallow/just right?
   int maxDepth = 4;
-  int maxNumBins = ipower(2, maxDepth);
+  int maxNumBins = pow2(maxDepth);
   int maxPointsPerBin = 10;
 
   struct node
@@ -59,6 +75,8 @@ private:
     size_t stop = 0;
     size_t level = 0;
     size_t size = 0;
+    size_t color = 0;
+    size_t dimSplit = 0;
     lsSmartPointer<node> left = nullptr;
     lsSmartPointer<node> right = nullptr;
 
@@ -119,9 +137,6 @@ private:
   lsSmartPointer<node> root = nullptr;
   std::vector<lsSmartPointer<node>> nodes;
 
-  // Methods
-  // void build() {}
-
 public:
   lsTree() {}
 
@@ -156,55 +171,66 @@ public:
     auto begin = mesh->getNodes().begin();
     auto end = mesh->getNodes().end();
 
-    std::cout << "Partitioning... " << std::endl;
-    // std::vector<point_type> below(begin, begin + medianPos);
-    // std::vector<point_type> above(begin + medianPos, end);
-    std::vector<T> below(medianPos, 0.);
-    std::vector<T> above(medianPos, 1.);
-    std::cout << "below.size: " << below.size() << std::endl;
-    std::cout << "above.size: " << above.size() << std::endl;
-    // mesh->insertNextVectorData(below, "below");
-    // mesh->insertNextVectorData(above, "above");
-    mesh->insertNextScalarData(below, "below");
-    mesh->insertNextScalarData(above, "above");
+    // Partition in z/y axis
+    size_t dimToPart = 2; // z
+    // Array that colors based on z (D=3)/y (D=2) partitioning (just for output)
+    color = std::vector<T>(N, -1);
+    std::for_each(color.begin() + medianPos, color.end(), [](auto &item) { item = 1; });
+
+    // Partition other dimensions
+    if (D > 2)
+    {
+      dimToPart = 1; // y
+      y = std::vector<size_t>(N, 0);
+      std::generate(y.begin(), y.end(), [n = 0]() mutable { return n++; });
+      partitionInDimension(begin, y.begin(), y.end(), dimToPart));
+    }
+    dimToPart = 0;
+    x = std::vector<size_t>(N);
+    n = 0;
+    std::generate(x.begin(), x.end(), [n = 0]() mutable { return n++; });
+    partitionInDimension(begin, x.begin(), x.end(), dimToPart));
 
     size_t index = 0;
     root = build(begin, 0, N, 0, index);
-    numBins = ipower(2, depth);
+    numBins = pow2(depth);
+    mesh->insertNextScalarData(color, "color");
   }
 
-  /// builds a node of the tree and returns a pointer 
-  /// 
+  /// builds a node of the tree and returns a pointer
+  ///
   /// checks if it should be a leaf node
   /// TODO: add partitioning of vector/mesh-nodes
+  /// TODO: Use Iterators (begin/end) instead of start/stop
   template <class VectorIt>
   lsSmartPointer<node> build(VectorIt begin, size_t start, size_t stop, size_t level, size_t &index)
   {
     size_t size = stop - start;
-    if (size < maxPointsPerBin)
-      return nullptr;
-    if (level > maxDepth)
+    if ((size < maxPointsPerBin) || (level > maxDepth))
       return nullptr;
     size_t halfSize = size / 2;
     // TODO: add partitioning of vector/mesh-nodes
-    // std::nth_element(begin, begin+halfSize, begin+size); // doesn't work cause we have triples here!
-    // partitionInDimension(dim, begin+start, begin+stop, begin[halfSize]);
-    size_t nextLevel = (level + 1);
+    //        or use partitioning here
     depth = (depth < level) ? level : depth;
-    size_t thisIndex = index;
-    index += 1;
+    //size_t thisIndex = index++;
+
+    // thisNodes split dimension
+    size_t dim = D - index++ % (D + 1); // offset
+
     auto thisNode = lsSmartPointer<node>::New();
     nodes.push_back(thisNode);
     thisNode->setRange(start, stop);
     thisNode->level = level;
-    thisNode->left = build(begin, start, start + halfSize, nextLevel, index);
-    thisNode->right = build(begin, start + halfSize, stop, nextLevel, index);
+    thisNode->dim = dim;
+
+    thisNode->left = build(begin, start, start + halfSize, level + 1, index);
+    thisNode->right = build(begin, start + halfSize, stop, level + 1, index);
 
     return thisNode;
   }
 
   /// [WIP] query the tree based on a single point
-  /// 
+  ///
   /// checks if it should be a leaf node
   /// TODO: TEST
   const lsSmartPointer<node> nearest(const point_type &pt)
@@ -223,12 +249,18 @@ public:
     return thisNode;
   }
 
-  // template <class VectorIt>
-  // size_t partitionInDimension(size_t dim, VectorIt begin, VectorIt end, size_t median)
-  // {
-  //   std::partition(begin, end, [dim, median](const auto &pos) { return pos[dim] < median; })
-  //   return std::distance(begin, end) / 2
-  // }
+  template <class VectorIt, class VectorItRes>
+  size_t partitionInDimension(VectorIt toSort, VectorItRes resultBegin, VectorItRes resultEnd, size_t dim)
+  {
+    // Taken and modified from: https://stackoverflow.com/questions/2312737/whats-a-good-way-of-temporarily-sorting-a-vector
+    std::sort(resultBegin, resultEnd,
+              [toSort](int left, int right) {
+                return toSort[left][dim] < toSort[right][dim]; // sort in ascending order
+              });
+
+    // previous
+    // std::partition(begin, end, [dim, median](const auto &pos) { return pos[dim] < median; }) return std::distance(begin, end) / 2
+  }
 
   // bool isWithinExtent(point_type &pt)
   // {
