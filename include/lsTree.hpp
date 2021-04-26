@@ -49,6 +49,7 @@ class lsTree
 public:
   using point_type = std::array<T, 3>;
   // typedef typename std::array<T, 3> point_type2;
+  using index_vector = std::vector<size_t>;
 
 private:
   // The mesh we're building a tree for
@@ -79,6 +80,7 @@ private:
     size_t dimSplit = 0;
     lsSmartPointer<node> left = nullptr;
     lsSmartPointer<node> right = nullptr;
+    bool isLeaf = true;
 
     point_type center; // unused for now
     point_type minimumExtent;
@@ -124,6 +126,12 @@ private:
       return pointDistance<T>(center.begin(), center.end(), pt.begin());
     }
 
+    void leafCheck(size_t colorAssign)
+    {
+      isLeaf = (left != nullptr || right != nullptr) ? false : true;
+      color = colorAssign;
+    }
+
     /// Unused (from discarded attempt)
     // void split()
     // {
@@ -134,8 +142,10 @@ private:
     //   right->setRange(med, stop);
     // }
   };
+  using nodes_vector = std::vector<lsSmartPointer<node>>;
   lsSmartPointer<node> root = nullptr;
-  std::vector<lsSmartPointer<node>> nodes;
+  nodes_vector nodes;
+  index_vector sortedPoints;
 
 public:
   lsTree() {}
@@ -168,63 +178,148 @@ public:
     std::cout << "N: " << N << std::endl;
     std::cout << "medianPos: " << medianPos << std::endl;
 
-    auto begin = mesh->getNodes().begin();
-    auto end = mesh->getNodes().end();
+    auto nodesBegin = mesh->getNodes().begin();
+    auto nodesEnd = mesh->getNodes().end();
 
-    // Partition in z/y axis
-    size_t dimToPart = 2; // z
-    // Array that colors based on z (D=3)/y (D=2) partitioning (just for output)
-    color = std::vector<T>(N, -1);
-    std::for_each(color.begin() + medianPos, color.end(), [](auto &item) { item = 1; });
+    std::vector<lsSmartPointer<index_vector>> orders;
 
-    // Partition other dimensions
-    if (D > 2)
+    // 1.Generate absolute orders in each dimension
+    // Sort in z/y axis (D=3/D=2)
+    // Nodes are already sorted correctly in highest dimension (D=3 -> z / D=2 -> y)
+    // Sort in x dimension (always)
+    size_t dimToSort = 0;
+    auto x_idx = lsSmartPointer<index_vector>::New(argsortInDimension(nodesBegin, dimToSort, N));
+    orders.push_back(x_idx);
+
+    // Sort in y dimension (if D = 3)
+    if constexpr (D > 2)
     {
-      dimToPart = 1; // y
-      y = std::vector<size_t>(N, 0);
-      std::generate(y.begin(), y.end(), [n = 0]() mutable { return n++; });
-      partitionInDimension(begin, y.begin(), y.end(), dimToPart));
+      dimToSort = 1; // y
+      auto y_idx = lsSmartPointer<index_vector>::New(argsortInDimension(nodesBegin, dimToSort, N));
+      orders.push_back(y_idx);
     }
-    dimToPart = 0;
-    x = std::vector<size_t>(N);
-    n = 0;
-    std::generate(x.begin(), x.end(), [n = 0]() mutable { return n++; });
-    partitionInDimension(begin, x.begin(), x.end(), dimToPart));
+
+    dimToSort = 2; // z
+    auto z_idx = lsSmartPointer<index_vector>::New(N);
+    std::generate(z_idx->begin(), z_idx->end(), [n = 0]() mutable
+                  { return n++; });
+    orders.push_back(z_idx);
+    // Nodes are already sorted correctly in highest dimension (D=3 -> z / D=2 -> y)
+    sortedPoints = *z_idx;
+
+    // The absolute, global sorted index-vectors are used to allow for by dimension sorting on node level
+    // Example
+    // Global order
+    // x: 0, 5, 3, 2, 1, 6, 4, 7,
+    // y: 5, 1, 0, 4, 6, 3, 7, 2
+    // z: 7, 3, 5, 2, 1, 4, 0, 6,
+    // kd-Tree by level
+    // L1(by x): sortedList = [0, 5,  3, 2] [1, 6,  4, 7]
+    // L2(by y): sortedList = [5, 0] [3, 2] [1, 4] [6, 7]
+    // L3(by z): sortedList = [5][0] [3][2] [1][4] [7][6]
 
     size_t index = 0;
-    root = build(begin, 0, N, 0, index);
+    size_t startLastLevel = 0;
+    for (size_t level = 0; level < maxDepth + 1; ++level)
+    {
+      // this levels split dimension
+      // 3D:
+      // cycle: z -> y -> x -> z -> y -> ...
+      // cycle: 2 -> 1 -> 0 -> 2 -> 1 -> ...
+      // 2D:
+      // cycle: y -> x -> y -> ...
+      // cycle: 1 -> 0 -> 1 -> ...
+      size_t dim = D - level % (D + 1); // offset
+      startLastLevel = buildLevel(sortedPoints, orders, level, dim, N);
+    }
     numBins = pow2(depth);
+    
+    // Array that colors based partitioning
+    color = std::vector<T>(N);
+    for (size_t i = startLastLevel; i < nodes.size(); ++i)
+    {
+      auto node = nodes[i];
+      for (size_t index = node->start; index < node->stop; ++index)
+      {
+        color[index] = node->color;
+      }
+    }
     mesh->insertNextScalarData(color, "color");
+  }
+
+  /// Builds the tree level-by-level
+  ///
+  /// 
+  /// TODO: Use Iterators (begin/end) instead of start/stop
+  template <class Vector, class VectorPointer>
+  size_t buildLevel(Vector &data, VectorPointer &orders, size_t level, size_t dim, size_t N)
+  {
+    size_t num_nodes = pow2(level);
+    size_t nodeSize = (size_t)std::ceil(N / num_nodes); // points per node in the level
+    depth = level;                                      // new level --> set tree depth
+
+    // TODO: Just append to nodes vector directly
+    // Just here, cause unsure if needed.
+    nodes_vector levelNodes(num_nodes);
+    auto start = 0;
+    auto stop = start + nodeSize;
+    auto order_begin = orders[dim]->begin();
+    auto order_end = orders[dim]->end();
+    auto data_begin = data.begin();
+    auto data_end = data.end();
+    for (auto &thisNode : levelNodes)
+    {
+      thisNode = lsSmartPointer<node>::New();
+      thisNode->setRange(start, stop);
+      sortByIdxRange(data_begin + start, data_begin + stop, order_begin, order_end);
+      thisNode->level = level;
+      thisNode->dimSplit = dim;
+
+      // TODO: Connect tree
+    }
+
+    bool isFinal = ((nodeSize < maxPointsPerBin) || (level > maxDepth)) ? false : true;
+    if (isFinal) {
+      int col = -int(levelNodes.size() / 2);
+      for (auto &thisNode : levelNodes)
+      {
+        thisNode->color = col;
+        ++col;
+      }
+    }
+    size_t thisLevelStart = nodes.size();
+    nodes.insert(nodes.end(), levelNodes.begin(), levelNodes.end());
+    return thisLevelStart;
   }
 
   /// builds a node of the tree and returns a pointer
   ///
   /// checks if it should be a leaf node
-  /// TODO: add partitioning of vector/mesh-nodes
   /// TODO: Use Iterators (begin/end) instead of start/stop
   template <class VectorIt>
-  lsSmartPointer<node> build(VectorIt begin, size_t start, size_t stop, size_t level, size_t &index)
+  lsSmartPointer<node> buildByDepth(VectorIt begin, size_t start, size_t stop, size_t level, size_t &index)
   {
     size_t size = stop - start;
     if ((size < maxPointsPerBin) || (level > maxDepth))
       return nullptr;
     size_t halfSize = size / 2;
-    // TODO: add partitioning of vector/mesh-nodes
-    //        or use partitioning here
     depth = (depth < level) ? level : depth;
     //size_t thisIndex = index++;
 
     // thisNodes split dimension
-    size_t dim = D - index++ % (D + 1); // offset
+    size_t dim = D - index % (D + 1); // offset
+    ++index;
 
     auto thisNode = lsSmartPointer<node>::New();
     nodes.push_back(thisNode);
     thisNode->setRange(start, stop);
     thisNode->level = level;
-    thisNode->dim = dim;
+    thisNode->dimSplit = dim;
 
     thisNode->left = build(begin, start, start + halfSize, level + 1, index);
     thisNode->right = build(begin, start + halfSize, stop, level + 1, index);
+    //thisNode->isLeaf = (thisNode->left != nullptr || thisNode->right != nullptr ) ? false : true;
+    thisNode->leafCheck(getNextLeafColor());
 
     return thisNode;
   }
@@ -249,17 +344,62 @@ public:
     return thisNode;
   }
 
+  /// Sorts a vector (range) by the Reihenfolge given by second vector
+  /// Elements of the first, that are not present in the second,
+  /// are pushed to the end.
+  ///
+  /// Example
+  /// x: 0, 5, 3, 2, 1, 6, 4, 7,
+  /// y: 5, 1, 0, 4, 6, 3, 7, 2
+  /// z: 7, 3, 5, 2, 1, 4, 0, 6,
+  /// L1(by x): sortedList = [0, 5,  3, 2] [1, 6,  4, 7]
+  /// L2(by y): sortedList = [5, 0] [3, 2] [1, 4] [6, 7]
+  /// L3(by z): sortedList = [5][0] [3][2] [1][4] [7][6]
+  template <class It, class It2>
+  void sortByIdxRange(It begin, It end, It2 beginSortBy, It2 endSortBy)
+  {
+    std::sort(begin, end,
+              [beginSortBy, endSortBy](auto left, auto right)
+              {
+                // sort in ascending order
+                for (auto it = beginSortBy; it < endSortBy; ++it)
+                {
+                  if (*it == left)
+                    return true;
+                  if (*it == right)
+                    return false;
+                }
+                return false;
+              });
+  }
+
+  /// Sorts a vector of 3D points (point cloud) by generating a sorted
+  /// vector of indices (of length size) and move-returns it.
+  /// Does NOT actually sort the vector (in place)!
+  template <class VectorIt>
+  index_vector argsortInDimension(VectorIt toSortBegin, size_t dim, size_t size)
+  {
+    std::vector<size_t> result(size);
+    std::generate(result.begin(), result.end(), [n = 0]() mutable
+                  { return n++; });
+    // Taken and modified from: https://stackoverflow.com/questions/2312737/whats-a-good-way-of-temporarily-sorting-a-vector
+    std::sort(result.begin(), result.end(),
+              [toSortBegin, dim](auto left, auto right) {                // left, right : size_t -> indices of vector toSort
+                return toSortBegin[left][dim] < toSortBegin[right][dim]; // sort in ascending order
+              });
+    return std::move(result);
+  }
+
+  /// OLD sortInDim
+  /// TODO: Remove old sort
   template <class VectorIt, class VectorItRes>
-  size_t partitionInDimension(VectorIt toSort, VectorItRes resultBegin, VectorItRes resultEnd, size_t dim)
+  index_vector partitionInDimensionOLD(VectorIt toSortBegin, VectorItRes resultBegin, VectorItRes resultEnd, size_t dim)
   {
     // Taken and modified from: https://stackoverflow.com/questions/2312737/whats-a-good-way-of-temporarily-sorting-a-vector
     std::sort(resultBegin, resultEnd,
-              [toSort](int left, int right) {
-                return toSort[left][dim] < toSort[right][dim]; // sort in ascending order
+              [toSortBegin, dim](auto left, auto right) {                // left, right : size_t -> indices
+                return toSortBegin[left][dim] < toSortBegin[right][dim]; // sort in ascending order
               });
-
-    // previous
-    // std::partition(begin, end, [dim, median](const auto &pos) { return pos[dim] < median; }) return std::distance(begin, end) / 2
   }
 
   // bool isWithinExtent(point_type &pt)
@@ -273,8 +413,18 @@ public:
   // }
 
   /*
-  * ---- DEBUG FUNCTIONS ---- *
+  * ---- UTILITY METHODS ---- *
   */
+private:
+  size_t getNextLeafColor()
+  {
+    return 0;
+  }
+
+  /*
+  * ---- DEBUG METHODS ---- *
+  */
+public:
   const std::string getTreeType()
   {
     return tree_type;
