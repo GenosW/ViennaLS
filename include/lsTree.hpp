@@ -67,7 +67,7 @@ private:
   // TODO: Validate the maxDepth setting. Too deep/too shallow/just right?
   int maxDepth = 4;
   int maxNumBins = pow2(maxDepth);
-  int maxPointsPerBin = 10;
+  int maxPointsPerBin = 3;
 
   struct node
   {
@@ -76,11 +76,11 @@ private:
     size_t stop = 0;
     size_t level = 0;
     size_t size = 0;
-    size_t color = 0;
+    int color = 0;
     size_t dimSplit = 0;
     lsSmartPointer<node> left = nullptr;
     lsSmartPointer<node> right = nullptr;
-    bool isLeaf = true;
+    bool isLeaf = false;
 
     point_type center; // unused for now
     point_type minimumExtent;
@@ -229,7 +229,9 @@ public:
       // 2D:
       // cycle: y -> x -> y -> ...
       // cycle: 1 -> 0 -> 1 -> ...
-      size_t dim = D - level % (D + 1); // offset
+      std::cout << "D: " << D << std::endl;
+      size_t dim = D - 1 - level % (D); // offset
+      //size_t dim = D - level % (D + 1); // offset
       startLastLevel = buildLevel(sortedPoints, orders, level, dim, N);
     }
     numBins = pow2(depth);
@@ -257,12 +259,16 @@ public:
     size_t num_nodes = pow2(level);
     size_t nodeSize = (size_t)std::ceil(N / num_nodes); // points per node in the level
     depth = level;                                      // new level --> set tree depth
+    std::cout << "Level: " << level << std::endl;
+    std::cout << "num_nodes: " << num_nodes << std::endl;
+    std::cout << "nodeSize: " << nodeSize << std::endl;
 
     // TODO: Just append to nodes vector directly
     // Just here, cause unsure if needed.
     nodes_vector levelNodes(num_nodes);
     auto start = 0;
     auto stop = start + nodeSize;
+    std::cout << "dim: " << dim << std::endl;
     auto order_begin = orders[dim]->begin();
     auto order_end = orders[dim]->end();
     auto data_begin = data.begin();
@@ -274,15 +280,20 @@ public:
       sortByIdxRange(data_begin + start, data_begin + stop, order_begin, order_end);
       thisNode->level = level;
       thisNode->dimSplit = dim;
+      start = stop;
+      stop = start + nodeSize;
+      thisNode->isLeaf = false;
 
       // TODO: Connect tree
     }
 
-    bool isFinal = ((nodeSize < maxPointsPerBin) || (level > maxDepth)) ? false : true;
+    //bool isFinal = ((nodeSize < maxPointsPerBin) || (level > maxDepth)) ? true : false;
+    bool isFinal = (level >= maxDepth) ? true : false;
     if (isFinal) {
       int col = -int(levelNodes.size() / 2);
       for (auto &thisNode : levelNodes)
       {
+        thisNode->isLeaf = true;
         thisNode->color = col;
         ++col;
       }
@@ -319,7 +330,6 @@ public:
     thisNode->left = build(begin, start, start + halfSize, level + 1, index);
     thisNode->right = build(begin, start + halfSize, stop, level + 1, index);
     //thisNode->isLeaf = (thisNode->left != nullptr || thisNode->right != nullptr ) ? false : true;
-    thisNode->leafCheck(getNextLeafColor());
 
     return thisNode;
   }
@@ -402,24 +412,10 @@ public:
               });
   }
 
-  // bool isWithinExtent(point_type &pt)
-  // {
-  //   for (size_t i = 0; i < pt.size(); ++i)
-  //   {
-  //     if (pt[i] < mesh->minimumExtent[i] || pt[i] > mesh->maximumExtent[i])
-  //       return false;
-  //   }
-  //   return true;
-  // }
-
   /*
   * ---- UTILITY METHODS ---- *
   */
 private:
-  size_t getNextLeafColor()
-  {
-    return 0;
-  }
 
   /*
   * ---- DEBUG METHODS ---- *
@@ -446,24 +442,32 @@ public:
   {
     for (size_t i = 0; i < nodes.size(); ++i)
     {
-      std::string leaf = (nodes[i]->left == nullptr && nodes[i]->right == nullptr) ? "#" : "";
-      std::cout << "node " << std::setw(3) << i << "(L" << nodes[i]->level << "): [" << nodes[i]->start << ", " << nodes[i]->stop << ")" << leaf << std::endl;
+      std::string leaf = (nodes[i]->isLeaf) ? "#" : "";
+      std::cout << "node " << std::setw(3) << i << "(L" << nodes[i]->level << "): [" << nodes[i]->start << ", " << nodes[i]->stop << ")" << leaf;
+      if (nodes[i]->isLeaf)
+        std::cout << "#(" << nodes[i]->color << ")";
+      std::cout << std::endl;
     }
   };
 
   /// prints tree one level per line at a time
   void printTreeByLevel()
   {
+    size_t offset = 0;
     for (size_t level = 0; level <= depth; ++level)
     {
+      size_t num_nodes = pow2(level);
       std::cout << "L" << level << ": ";
-      for (size_t i = 0; i < nodes.size(); ++i)
+      for (size_t i = offset; i < offset+num_nodes; ++i)
       {
-        if (nodes[i]->level != level)
-          continue;
+        //if (nodes[i]->level != level)
+          //continue;
+        if ((i+1)%8 == 0 && level > 3)
+          std::cout << "\n";
         std::cout << std::setw(3) << i << "[" << nodes[i]->start << ", " << nodes[i]->stop << ") --- ";
       }
       std::cout << std::endl;
+      offset += num_nodes;
     }
   };
 };
