@@ -47,7 +47,17 @@ T pointDistance(Iter_T first, Iter_T last, Iter2_T first2)
 /// TODO: clean up parameters, member functions and attributes
 /// TODO: order
 ///
-/// Maximum depth is 4?
+/// Types:
+///
+/// using value_type = T;
+/// using size_type = std::size_t
+/// using point_type = std::array<T, 3>;
+/// using index_vector = std::vector<size_t>;
+/// using data_vector = std::vector<point_type>;
+/// using iterator = treeIterator<point_type>;
+/// using const_iterator = constTreeIterator<point_type>;
+/// using range_vector = typename iterator::range_vector;
+/// using nodes_vector = std::vector<lsSmartPointer<treeNode>>;
 template <class T, int D>
 class lsTree
 {
@@ -73,6 +83,7 @@ private:
   struct treeNode
   {
     bool isLeaf = false;
+    /// TODO: Implement std::pair<pointer, pointer> for start stop?
     size_t start = 0;
     size_t stop = 0;
     size_t level = 0;
@@ -106,6 +117,13 @@ private:
     }
 
     size_t size()
+    {
+      return stop - start;
+    }
+    /// same as size()
+    ///
+    /// TODO: stdlib bucket type containers interface?
+    size_t bucket_size()
     {
       return stop - start;
     }
@@ -166,12 +184,13 @@ private:
   ///
   /// Some points about vector iterators:
   /// https://codereview.stackexchange.com/questions/202157/basic-iterator-supporting-vector-implementation
+  /// Iterators: https://www.cplusplus.com/reference/iterator/
   template <class VT = point_type>
   struct treeIterator
   {
   public:
     // TODO: Evaluate iterator category
-    using iterator_category = std::bidirectional_iterator_tag;
+    using iterator_category = std::bidirectional_iterator_tag; // seems likeliest for now
     // std::random_access_iterator_tag;
     // std::forward_iterator_tag;
     using value_type = VT;
@@ -184,21 +203,40 @@ private:
 
     // Position based implementaiton
     range_vector ranges;
+    size_t segment = 0;
     // Idea: Utilize [start, stop) of each leaf node
     // ranges = [(startBin1, stopBin1), (startBin2, stopBin2),
     //           (startBin3, stopBin3), (startBin4, stopBin4), ... ]
-    pointer pos;
+    pointer pos; // ->data[init]
+    // unordered map/set iterator anschauen
 
   public:
     treeIterator() = default;
-    //treeIterator(size_type start) : pos(*data[start]){};
+
     treeIterator(range_vector input) : pos(input[0].first), ranges(input){};
     treeIterator(range_vector input, size_type start) : pos(input[start].first), ranges(input){};
     treeIterator(range_vector input, pointer start_pos) : pos(start_pos), ranges(input){};
-    // treeIterator(treeNode *init) : pos(*(init->start)){};
     treeIterator(treeIterator &other) : pos(other.pos), ranges(other.ranges){};
-    // treeIterator(treeIterator other) : pos(other.pos), ranges(other.ranges){};
-    // treeIterator(const MyConstIterator& other) = delete;
+
+    treeIterator(treeNode &node) : pos(*(this->data[node.start]))
+    {
+      auto bin_range = std::make_pair(*(this->data[node.start]), *(this->data[node.stop]));
+      ranges = range_vector{bin_range};
+    }
+    treeIterator(nodes_vector &bins) : pos(*(this->data[bins[0].start]))
+    {
+      ranges = range_vector();
+      for (const treeNode &node : bins)
+      {
+        auto bin_range = std::make_pair(*(this->data[node.start]), *(this->data[node.stop]));
+        ranges.push_back(bin_range);
+      }
+    }
+
+    // treeIterator &operator=(treeIterator &other)
+    // {
+    //   return treeIterator(other);
+    // }
 
     // ------- Access -------
     reference operator*() const
@@ -243,38 +281,65 @@ private:
     // ---------- Arithmetic Operations ----------
     treeIterator &operator++()
     {
-      ++(this->pos);
+      if (pos == ranges[segment][1])
+      {
+        ++segment;
+        pos = ranges[segment][0];
+        return &this;
+      }
+      ++pos;
       return &this;
     }
+
     treeIterator operator++(int)
     {
-      (this->pos)++;
-      return this;
+      if (pos == ranges[segment][1])
+      {
+        ++segment;
+        pos = ranges[segment][0];
+        return &this;
+      }
+      pos++;
+      return &this;
     }
 
     treeIterator &operator--()
     {
-      --(this->pos);
+      if (pos == ranges[segment][0])
+      {
+        --segment;
+        pos = ranges[segment][1];
+        return &this;
+      }
+      --pos;
       return &this;
     }
     treeIterator operator--(int) //optional
     {
-      (this->pos)--;
-      return this;
-    }
-
-    treeIterator &operator+=(const size_type n) //optional
-    {
-      this->pos += n;
+      if (pos == ranges[segment][0])
+      {
+        --segment;
+        pos = ranges[segment][1];
+        return &this;
+      }
+      pos--;
       return &this;
     }
-    friend treeIterator operator+(const size_type n, const treeIterator &); //optional
 
-    treeIterator &operator-=(const size_type n) //optional
-    {
-      this->pos -= n;
-      return &this;
-    }
+    /// TODO: depends on iterator type...
+    /// These types of operations might not be possible due to disconnected segments
+    // treeIterator &operator+=(const size_type n) //optional
+    // {
+    //   this->pos += n;
+    //   return &this;
+    // }
+    // friend treeIterator operator+(const size_type n, const treeIterator &); //optional
+
+    // treeIterator &operator-=(const size_type n) //optional
+    // {
+    //   this->pos -= n;
+    //   return &this;
+    // }
     // TODO: Evaluate if needed/usefull/sensible
     // treeIterator operator+(const size_type n) const //optional
     // {
@@ -289,13 +354,12 @@ private:
     //   return ret;
     // }
 
-    /// Meaningfullness is kinda iffy here due to the (potential) chunked
-    /// nature of the underlying data structure
-    difference_type operator-(const size_type n) const //optional
-    {
-      this->pos + n;
-      return this;
-    }
+    /// TODO: Difference could still be useful, but maybe only within segments?
+    // difference_type operator-(const size_type n) const //optional
+    // {
+    //   this->pos + n;
+    //   return this;
+    // }
   };
 
   /// const_iterator version of the (tree)Iterator
@@ -313,12 +377,12 @@ private:
   using iterator = treeIterator<point_type>;
   using const_iterator = constTreeIterator<point_type>;
   using range_vector = typename iterator::range_vector;
-  // treeIterator() = default;
-  // treeIterator(size_type start) : pos(*data[start]){};
-  // treeIterator(treeNode *init) : pos(*(init->start)){};
-  // treeIterator(range_vector input) : pos(input[0].first), ranges(input){};
-  // treeIterator(range_vector input, size_type start) : pos(input[start].first), ranges(input){};
-  // treeIterator(range_vector input, pointer start_pos) : pos(start_pos), ranges(input){};
+// treeIterator() = default;
+// treeIterator(size_type start) : pos(*data[start]){};
+// treeIterator(treeNode *init) : pos(*(init->start)){};
+// treeIterator(range_vector input) : pos(input[0].first), ranges(input){};
+// treeIterator(range_vector input, size_type start) : pos(input[start].first), ranges(input){};
+// treeIterator(range_vector input, pointer start_pos) : pos(start_pos), ranges(input){};
 #pragma endregion
 
 #pragma region Interface
@@ -437,6 +501,10 @@ public:
       }
 #define REORDER
 #ifdef REORDER
+      //data = [(x,y,z), (x,y,z), (x,y,z),]
+
+      //sortedPoints = [0, 1, 2, 90,91,92 ||, ...]
+      // TODO: impact on large vs small data arrays
       sortByIndicesInplace(data, sortedPoints);
       // Array that colors based partitioning
       color = std::vector<T>(N);
@@ -472,6 +540,212 @@ public:
       auto root = buildByDepth(sortedPoints, orders, data, 0, N, 0);
     }
   }
+
+  //---- QUERY METHODS ----
+
+private:
+  /// Helper function
+  lsSmartPointer<treeNode> getBin(const point_type &pt) const
+  {
+
+    lsSmartPointer<treeNode> thisNode = treeNodes.front();
+    while (!thisNode->isLeaf)
+      thisNode = (thisNode->belowMedian(pt)) ? thisNode->left : thisNode->right;
+    return thisNode;
+  }
+
+public:
+  iterator getNearestNeighbors(const point_type &point)
+  {
+    if (treeNodes.empty())
+    {
+      lsMessage::getInstance()
+          .addWarning("lsTree was not built. Returning empty iterator.")
+          .print();
+      return iterator();
+    }
+    return iteratorType(getBin(point));
+  }
+
+  /// Get the nearest Neighbors in form of one or more bins.
+  ///
+  /// Returns an iterator to the nearest points found.
+  /// Since the lsTree partioned the space into multiple bins, the resulting
+  /// iterator of this query might refer to multiple disconnected segments
+  /// in memory - even if the original container was contingent
+  /// (e.g. std::vector, std::array).
+  template <class iteratorType = iterator>
+  iteratorType getNearestNeighbors(const data_vector &points)
+  {
+    if (treeNodes.empty())
+    {
+      lsMessage::getInstance()
+          .addWarning("lsTree was not built. Returning empty iterator.")
+          .print();
+      return iteratorType();
+    }
+
+    nodes_vector found_nodes;
+    for (auto &pt : points)
+      found_nodes.push_back(getBin(pt));
+
+    return iteratorType(found_nodes);
+  }
+#pragma region IteratorMethods
+  // private:
+  // template <class returnType>
+  // returnType treeBuiltCheck(returnType& toReturnIfError){
+  //   if (mesh == nullptr)
+  //     {
+  //       lsMessage::getInstance()
+  //           .addWarning("No mesh was passed to lsTree.")
+  //           .print();
+  //       return toReturnIfError;
+  //     }
+  // }
+
+  iterator begin()
+  {
+
+    range_vector all{data.front(), data.back()};
+    return iterator(all);
+  };
+  iterator end()
+  {
+    if (treeNodes.empty())
+    {
+      lsMessage::getInstance()
+          .addWarning("lsTree was not built. Returning empty iterator.")
+          .print();
+      return iterator();
+    }
+    range_vector all{data.front(), data.back()};
+    return const_iterator(all, data.back());
+  }
+  const_iterator begin() const
+  {
+    if (treeNodes.empty())
+    {
+      lsMessage::getInstance()
+          .addWarning("lsTree was not built. Returning empty iterator.")
+          .print();
+      return const_iterator();
+    }
+    range_vector all{data.front(), data.back()};
+    return const_iterator(all);
+  };
+  const_iterator end() const
+  {
+    if (treeNodes.empty())
+    {
+      lsMessage::getInstance()
+          .addWarning("lsTree was not built. Returning empty iterator.")
+          .print();
+      return const_iterator();
+    }
+    range_vector all{data.front(), data.back()};
+    return const_iterator(all, data.back());
+  };
+
+  const_iterator cbegin() const
+  {
+    if (treeNodes.empty())
+    {
+      lsMessage::getInstance()
+          .addWarning("lsTree was not built. Returning empty iterator.")
+          .print();
+      return const_iterator();
+    }
+    range_vector all{data.front(), data.back()};
+    return const_iterator(all);
+  };
+  const_iterator cend() const
+  {
+    if (treeNodes.empty())
+    {
+      lsMessage::getInstance()
+          .addWarning("lsTree was not built. Returning empty iterator.")
+          .print();
+      return const_iterator();
+    }
+    range_vector all{data.front(), data.back()};
+    return const_iterator(all, data.back());
+  };
+#pragma endregion All methods concerning treeIterator useage
+  /*
+  * ---- TREE INFO ---- *
+  */
+
+  size_type getNumberOfBins() const
+  {
+    return numBins;
+  }
+  /// stdlib equivalent
+  ///
+  /// TODO: stdlib bucket type containers interface?
+  size_type bucket_count() const
+  {
+    return numBins;
+  }
+  /*
+  * ---- DEBUG METHODS ---- *
+  */
+public:
+  const std::string getTreeType()
+  {
+    return tree_type;
+  }
+
+  /// prints parameters
+  void printInfo()
+  {
+    std::cout << getTreeType() << std::endl;
+    std::cout << "depth: " << depth << std::endl;
+    std::cout << "numBins: " << numBins << std::endl;
+    std::cout << "maxDepth: " << maxDepth << std::endl;
+    std::cout << "maxNumBins: " << maxNumBins << std::endl;
+    std::cout << "maxPointsPerBin: " << maxPointsPerBin << std::endl;
+  }
+
+  /// prints tree by simply going through nodes-vector
+  void printTree()
+  {
+    for (size_t i = 0; i < treeNodes.size(); ++i)
+    {
+      std::string leaf = (treeNodes[i]->isLeaf) ? "#" : "";
+      std::cout << "treeNode " << std::setw(3) << i << "(L" << treeNodes[i]->level << "): [" << treeNodes[i]->start << ", " << treeNodes[i]->stop << ")" << leaf;
+      if (treeNodes[i]->isLeaf)
+        std::cout << "#(" << treeNodes[i]->color << ")";
+      std::cout << std::endl;
+    }
+  }
+
+  /// prints tree one level per line at a time
+  void printTreeByLevel()
+  {
+    size_t offset = 0;
+    for (size_t level = 0; level <= depth; ++level)
+    {
+      size_t num_nodes = pow2(level);
+      std::cout << "L" << level << ": ";
+      for (size_t i = offset; i < offset + num_nodes; ++i)
+      {
+        //if (treeNodes[i]->level != level)
+        //continue;
+        if ((i + 1) % 8 == 0 && level > 3)
+          std::cout << "\n";
+        std::cout << std::setw(3) << i << "[" << treeNodes[i]->start << ", " << treeNodes[i]->stop << ") --- ";
+      }
+      std::cout << std::endl;
+      offset += num_nodes;
+    }
+  }
+#pragma endregion These methods define the interactive(method) interface to the outside.
+#pragma Private Methods
+private:
+  /*
+  * ---- UTILITY METHODS ---- *
+  */
 
   /// Builds the tree level-by-level
   ///
@@ -568,140 +842,6 @@ public:
 
     return thisNode;
   }
-
-  //---- QUERY METHODS ----
-
-public:
-  /// [WIP] query the tree based on a single point
-  ///
-  /// checks if it should be a leaf treeNode
-  /// TODO: TEST
-  lsSmartPointer<treeNode> nearest_points(const point_type &pt) const
-  {
-    if (treeNodes.empty())
-    {
-      lsMessage::getInstance()
-          .addWarning("lsTree was not built. Returning pt.")
-          .print();
-      return nullptr;
-    }
-
-    // TODO: Incorporate iterator
-    lsSmartPointer<treeNode> thisNode = treeNodes.front();
-    while (!thisNode->isLeaf)
-      thisNode = (thisNode->belowMedian(pt)) ? thisNode->left : thisNode->right;
-    return thisNode;
-  }
-
-  nodes_vector nearest_points(const data_vector &points) const
-  {
-    if (treeNodes.empty())
-    {
-      lsMessage::getInstance()
-          .addWarning("lsTree was not built. Returning pt.")
-          .print();
-      return nullptr;
-    }
-
-    // TODO: Incorporate iterator
-    nodes_vector found_nodes;
-    for (auto &pt : points)
-      found_nodes.push_back(nearest_points(pt));
-    return found_nodes;
-  }
-#pragma region IteratorMethods
-
-  iterator begin()
-  {
-    range_vector all{data.front(), data.back()};
-    return iterator(all);
-  };
-  iterator end()
-  {
-    range_vector all{data.front(), data.back()};
-    return const_iterator(all, data.back());
-  }
-  const_iterator begin() const
-  {
-    range_vector all{data.front(), data.back()};
-    return const_iterator(all);
-  };
-  const_iterator end() const
-  {
-    range_vector all{data.front(), data.back()};
-    return const_iterator(all, data.back());
-  };
-
-  const_iterator cbegin() const
-  {
-    range_vector all{data.front(), data.back()};
-    return const_iterator(all);
-  };
-  const_iterator cend() const
-  {
-    range_vector all{data.front(), data.back()};
-    return const_iterator(all, data.back());
-  };
-#pragma endregion All methods concerning treeIterator useage
-  /*
-  * ---- DEBUG METHODS ---- *
-  */
-public:
-  const std::string getTreeType()
-  {
-    return tree_type;
-  }
-
-  /// prints parameters
-  void printInfo()
-  {
-    std::cout << getTreeType() << std::endl;
-    std::cout << "depth: " << depth << std::endl;
-    std::cout << "numBins: " << numBins << std::endl;
-    std::cout << "maxDepth: " << maxDepth << std::endl;
-    std::cout << "maxNumBins: " << maxNumBins << std::endl;
-    std::cout << "maxPointsPerBin: " << maxPointsPerBin << std::endl;
-  }
-
-  /// prints tree by simply going through nodes-vector
-  void printTree()
-  {
-    for (size_t i = 0; i < treeNodes.size(); ++i)
-    {
-      std::string leaf = (treeNodes[i]->isLeaf) ? "#" : "";
-      std::cout << "treeNode " << std::setw(3) << i << "(L" << treeNodes[i]->level << "): [" << treeNodes[i]->start << ", " << treeNodes[i]->stop << ")" << leaf;
-      if (treeNodes[i]->isLeaf)
-        std::cout << "#(" << treeNodes[i]->color << ")";
-      std::cout << std::endl;
-    }
-  }
-
-  /// prints tree one level per line at a time
-  void printTreeByLevel()
-  {
-    size_t offset = 0;
-    for (size_t level = 0; level <= depth; ++level)
-    {
-      size_t num_nodes = pow2(level);
-      std::cout << "L" << level << ": ";
-      for (size_t i = offset; i < offset + num_nodes; ++i)
-      {
-        //if (treeNodes[i]->level != level)
-        //continue;
-        if ((i + 1) % 8 == 0 && level > 3)
-          std::cout << "\n";
-        std::cout << std::setw(3) << i << "[" << treeNodes[i]->start << ", " << treeNodes[i]->stop << ") --- ";
-      }
-      std::cout << std::endl;
-      offset += num_nodes;
-    }
-  }
-#pragma endregion These methods define the interactive(method) interface to the outside.
-#pragma Private Methods
-private:
-  /*
-  * ---- UTILITY METHODS ---- *
-  */
 
   /// Sorts a vector (range) by the Reihenfolge given by second vector
   /// Elements of the first, that are not present in the second,
