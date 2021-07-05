@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.4)
 
-project("AdvectionPlane")
+project("MarkVoidPoints")
 
 find_package(ViennaLS REQUIRED)
 

@@ -6,8 +6,10 @@
 // add all headers which require template specialisation
 #include <lsAdvect.hpp>
 #include <lsBooleanOperation.hpp>
+#include <lsCalculateCurvatures.hpp>
 #include <lsCalculateNormalVectors.hpp>
 #include <lsCheck.hpp>
+#include <lsDetectFeatures.hpp>
 #include <lsDomain.hpp>
 #include <lsExpand.hpp>
 #include <lsFromSurfaceMesh.hpp>
@@ -30,12 +32,14 @@ PRECOMPILE_SPECIALIZE_PRECISION(lsPointData)
 PRECOMPILE_SPECIALIZE_PRECISION(lsMesh)
 PRECOMPILE_SPECIALIZE(lsAdvect)
 PRECOMPILE_SPECIALIZE(lsBooleanOperation)
+PRECOMPILE_SPECIALIZE(lsCalculateCurvatures)
 PRECOMPILE_SPECIALIZE(lsCalculateNormalVectors)
 PRECOMPILE_SPECIALIZE(lsCheck)
 PRECOMPILE_SPECIALIZE(lsConvexHull)
 PRECOMPILE_SPECIALIZE(lsDomain)
 PRECOMPILE_SPECIALIZE(lsExpand)
 PRECOMPILE_SPECIALIZE(lsGeometricAdvect)
+PRECOMPILE_SPECIALIZE(lsDetectFeatures)
 PRECOMPILE_SPECIALIZE(lsFromMesh)
 PRECOMPILE_SPECIALIZE(lsFromSurfaceMesh)
 PRECOMPILE_SPECIALIZE(lsFromVolumeMesh)

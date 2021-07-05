@@ -103,6 +103,10 @@ public:
                : "";
   }
 
+  void setScalarDataLabel(int index, std::string newLabel) {
+    scalarDataLabels[index] = newLabel;
+  }
+
   VectorDataType *getVectorData(int index) {
     return indexPointerOrNull(vectorData, index);
   }
@@ -133,6 +137,10 @@ public:
     return (index >= 0 && index < vectorDataLabels.size())
                ? vectorDataLabels[index]
                : "";
+  }
+
+  void setVectorDataLabel(int index, std::string newLabel) {
+    vectorDataLabels[index] = newLabel;
   }
 
   void append(const lsPointData &passedData) {
@@ -243,9 +251,8 @@ public:
     for (unsigned i = 0; i < numberOfScalarData; ++i) {
       uint32_t sizeOfName;
       stream.read(reinterpret_cast<char *>(&sizeOfName), sizeof(uint32_t));
-      std::vector<char> dataLabel(sizeOfName + 1);
+      std::vector<char> dataLabel(sizeOfName);
       stream.read(dataLabel.data(), sizeOfName);
-      dataLabel[sizeOfName] = '\0';
       uint32_t numberOfValues;
       stream.read(reinterpret_cast<char *>(&numberOfValues), sizeof(uint32_t));
       ScalarDataType scalarData;
@@ -264,9 +271,8 @@ public:
     for (unsigned i = 0; i < numberOfVectorData; ++i) {
       uint32_t sizeOfName;
       stream.read(reinterpret_cast<char *>(&sizeOfName), sizeof(uint32_t));
-      std::vector<char> dataLabel(sizeOfName + 1);
+      std::vector<char> dataLabel(sizeOfName);
       stream.read(dataLabel.data(), sizeOfName);
-      dataLabel[sizeOfName] = '\0';
       uint32_t numberOfValues;
       stream.read(reinterpret_cast<char *>(&numberOfValues), sizeof(uint32_t));
       VectorDataType vectorData;
