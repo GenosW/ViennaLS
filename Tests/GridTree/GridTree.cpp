@@ -12,126 +12,198 @@
 #include <lsMakeGeometry.hpp>
 #include <lsToMesh.hpp>
 #include <lsToDiskMesh.hpp>
+#include <lsTestAsserts.hpp>
 //#define LS_TREE
 #include <lsTree.hpp>
 #include <lsVTKWriter.hpp>
 
-int test_2D(void)
+#define PRINT(Var) std::cout << #Var << ": " << Var
+
+enum struct lsTestStatus : unsigned
 {
+  SUCCESS = 0,
+  FAILED = 1,
+  UNCHECKED = 2
 
-  constexpr int D = 2;
+};
 
-  int before = omp_get_max_threads();
+struct lsTest
+{
+  lsTestStatus status = lsTestStatus::UNCHECKED;
+  std::string name = "unnamed";
+
+  lsTest(const lsTestStatus stat)
+  {
+    status = stat;
+  }
+  lsTest(lsTestStatus stat, std::string nam) : status(stat), name(nam) {}
+
+  template <typename T>
+  bool run(T (&test)(void))
+  {
+    this->status = lsTestStatus{(uint)test()};
+    return this->status == lsTestStatus::SUCCESS;
+  }
+
+  void check() const
+  {
+    std::cout << name;
+    if (status == lsTestStatus::FAILED)
+    {
+      std::cout << ": FAILED";
+    }
+    else if (status == lsTestStatus::SUCCESS)
+    {
+      std::cout << ": SUCCESS";
+    }
+    else if (status == lsTestStatus::UNCHECKED)
+    {
+      std::cout << ": UNCHECKED";
+    }
+    else
+    {
+      std::cout << ": unknown status";
+    }
+    std::cout << std::endl;
+  };
+
+  lsTestStatus operator()() const
+  {
+    return this->status;
+  }
+
+  bool wasSuccess() const
+  {
+    return this->status == lsTestStatus::SUCCESS;
+  }
+};
+
+#define INIT_LSTEST(Var) lsTest(lsTestStatus::UNCHECKED, #Var)
+#define MAKE_LSTEST(Var) lsTest Var(lsTestStatus::UNCHECKED, #Var)
+
+template <class Test, class... Tests>
+void check(Test const &t1, Tests const &...rest)
+{
+  t1.check();
+  if constexpr (sizeof...(rest) > 0)
+  {
+    check(rest...);
+  }
+}
+
+template <typename... Args>
+bool all(Args... args)
+{
+  return (... && args);
+}
+
+template <typename T, typename... Args>
+bool all_equal(T target, Args... args)
+{
+  return ((target == args) && ...);
+}
+
+void setup_omp(uint numThreads)
+{
+  int maxThreads = omp_get_max_threads();
   omp_set_num_threads(4);
-  std::cout << "Using " << omp_get_max_threads() << " (of max " << before << ") threads for this test." << std::endl;
+  std::cout << "Using " << omp_get_max_threads() << " (of max " << maxThreads << ") threads for this test." << std::endl;
+};
 
+template <int Dim>
+lsTestStatus testTree(void)
+{
+  constexpr int D = Dim;
+  const std::string prefix = "meshes/" + std::to_string(D) + "D";
+
+  setup_omp(4);
+
+  // Setup reference geometry
   auto levelSet = lsSmartPointer<lsDomain<double, D>>::New();
   auto mesh = lsSmartPointer<lsMesh<>>::New();
 
   const double radius = 10;
   const hrleVectorType<double, D> centre(5., 0.);
 
-  lsMakeGeometry<double, 2>(
+  lsMakeGeometry<double, D>(
       levelSet, lsSmartPointer<lsSphere<double, D>>::New(centre, radius))
       .apply();
 
+  // Get reference geometry parameters
+  size_t N = levelSet->getDomain().getNumberOfPoints();
   std::cout << "Initial: " << std::endl;
-  std::cout << "Number of points: " << levelSet->getDomain().getNumberOfPoints()
-            << std::endl;
-  lsToMesh<double, D>(levelSet, mesh).apply();
-  lsVTKWriter<double>(mesh, "2D_ToMesh.vtk").apply();
+  std::cout << "Number of points: " << N << std::endl;
 
+  // --- Volumetric mesh
+  lsToMesh<double, D>(levelSet, mesh).apply();
+  lsVTKWriter<double>(mesh, prefix + "_Mesh.vtk").apply();
+
+  // Compute lsTree of volumetric mesh
   auto tree = lsTree<double, D>(mesh);
   tree.apply();
-  lsVTKWriter(mesh, lsFileFormatEnum::VTU, "2D_TreeMesh.vtu").apply();
-  // TODO: remove verbose test output and replace with SUCCESS/FAIL style output
-  tree.printInfo();
-  // tree.printTree();
-  // tree.printTreeByLevel();
+  lsVTKWriter(mesh, lsFileFormatEnum::VTU, prefix + "_TreeMesh.vtu").apply();
+
   tree.printBT();
-
-  std::cout << "DiskMesh: " << std::endl;
-  lsToDiskMesh<double, D>(levelSet, mesh).apply();
-  lsVTKWriter(mesh, lsFileFormatEnum::VTU, "2D_ToDiskMesh.vtu").apply();
-
-  std::cout << "VTKWriter --> Disk.vtu: DONE" << std::endl;
-  auto tree2 = lsTree<double, D>(mesh);
-  tree2.apply();
-  lsVTKWriter(mesh, lsFileFormatEnum::VTU, "2D_TreeDiskMesh.vtu").apply();
-  // TODO: remove verbose test output and replace with SUCCESS/FAIL style output
-  tree2.printInfo();
-  // tree2.printTree();
-  // tree2.printTreeByLevel();
-  tree.printBT();
-  return EXIT_SUCCESS;
-};
-
-int test_3D(void)
-{
-  constexpr int D = 3;
-
-  int before = omp_get_max_threads();
-  omp_set_num_threads(4);
-  std::cout << "Using " << omp_get_max_threads() << " (of max " << before << ") threads for this test." << std::endl;
-
-  auto levelSet = lsSmartPointer<lsDomain<double, D>>::New();
-  auto mesh = lsSmartPointer<lsMesh<>>::New();
-
-  const double radius = 3;
-  for (double radius = 1; radius < 6.1; ++radius)
+  // EVALUATE
+  auto numLevels = tree.getDepth();
+  std::vector<size_t> ptsInTree(numLevels + 1, 0);
+  for (auto &node : tree.getTreeNodes())
   {
-    // radius = 1 --> 25 po{ints
-    // radius = 2 --> 86 points‚
-    // radius = 3 --> 230 points
-    // radius = 4 -->  points
-    const hrleVectorType<double, D> centre(5., 0., 0.);
-
-    lsMakeGeometry<double, D>(
-        levelSet, lsSmartPointer<lsSphere<double, D>>::New(centre, radius))
-        .apply();
-
-    std::cout << "Initial: " << std::endl;
-    std::cout << "Number of points: " << levelSet->getDomain().getNumberOfPoints()
-              << std::endl;
-    lsToMesh<double, D>(levelSet, mesh).apply();
-    lsVTKWriter<double>(mesh, "3D_ToMesh.vtk").apply();
-#include <chrono>
-    const auto start = std::chrono::high_resolution_clock::now();
-    auto tree = lsTree<double, D>(mesh);
-    tree.apply();
-    lsVTKWriter(mesh, lsFileFormatEnum::VTU, "3D_TreeMesh.vtu").apply();
-    // TODO: remove verbose test output and replace with SUCCESS/FAIL style output
-    tree.printInfo();
-    // tree.printTree();
-    // tree.printTreeByLevel();
-    tree.printBT();
-
-    std::cout << "DiskMesh: " << std::endl;
-    lsToDiskMesh<double, D>(levelSet, mesh).apply();
-    lsVTKWriter(mesh, lsFileFormatEnum::VTU, "3D_ToDiskMesh.vtu").apply();
-
-    std::cout << "VTKWriter --> Disk.vtu: DONE" << std::endl;
-    auto tree2 = lsTree<double, D>(mesh);
-    tree2.apply();
-    lsVTKWriter(mesh, lsFileFormatEnum::VTU, "3D_TreeDiskMesh.vtu").apply();
-    // TODO: remove verbose test output and replace with SUCCESS/FAIL style output
-    tree2.printInfo();
-    // tree2.printTree();
-    // tree2.printTreeByLevel();
-    tree.printBT();
+    // std::cout << "{color: " << node->color
+    //           << " / level: " << node->level
+    //           << " / isLeaf: " << node->isLeaf
+    //           << "} -> size:" << node->size() << std::endl;
+    ptsInTree[node->level] += node->size();
   }
-  return EXIT_SUCCESS;
+  LSTEST_ASSERT(
+      std::all_of(ptsInTree.cbegin(), ptsInTree.cend(),
+                  [N](auto item)
+                  { return item == N; }));
+
+  // --- DiskMesh
+  // std::cout << "DiskMesh: " << std::endl;
+  // lsToDiskMesh<double, D>(levelSet, mesh).apply();
+  // lsVTKWriter(mesh, lsFileFormatEnum::VTU, prefix + "_DiskMesh.vtu").apply();
+
+  // auto tree2 = lsTree<double, D>(mesh);
+  // tree2.apply();
+  // lsVTKWriter(mesh, lsFileFormatEnum::VTU, prefix + "_TreeDiskMesh.vtu").apply();
+
+  // numLevels = tree2.getDepth();
+  // ptsInTree = std::vector<size_t>(numLevels + 1, 0);
+  // for (auto &node : tree.getTreeNodes())
+  // {
+  //   // std::cout << "{color: " << node->color
+  //   //           << " / level: " << node->level
+  //   //           << " / isLeaf: " << node->isLeaf
+  //   //           << "} -> size:" << node->size() << std::endl;
+  //   ptsInTree[node->level] += node->size();
+  // }
+  // LSTEST_ASSERT(
+  //     std::all_of(ptsInTree.cbegin(), ptsInTree.cend(),
+  //                 [N](auto item)
+  //                 { return item == N; }));
+
+  // PASS!
+  return lsTestStatus::SUCCESS;
 };
 
 int main(int argc, char **argv)
 {
-  int success_2d_test = EXIT_SUCCESS, success_3d_test = EXIT_SUCCESS;
-  // success_2d_test = test_2D();
-  success_3d_test = test_3D();
-  if (success_2d_test == EXIT_SUCCESS && success_3d_test == EXIT_SUCCESS)
+  lsTest test_2d = INIT_LSTEST(test_2d);
+  MAKE_LSTEST(test_3d);
+
+  test_2d.run(testTree<2>);
+  // test_3d.run(testTree<3>);
+
+  std::cout << "------------- RESUMÉ -------------" << std::endl;
+
+  check(test_2d, test_3d);
+
+  if (all(test_2d.wasSuccess(), test_3d.wasSuccess()))
     std::cout << "Test " << argv[0] << ": SUCCESS!";
   else
     std::cout << "Test " << argv[0] << ": FAILURE!";
 
-  return 0;
+  return EXIT_SUCCESS;
 }

@@ -31,7 +31,9 @@
 /// shifted long distances in one step. This algorithm is therefore preferable
 /// to normal advection if there is growth/reduction by a purely geometric
 /// directional distribution.
-template <class T, int D> class lsGeometricAdvect {
+template <class T, int D>
+class lsGeometricAdvect
+{
   lsSmartPointer<lsDomain<T, D>> levelSet = nullptr;
   lsSmartPointer<lsDomain<T, D>> maskLevelSet = nullptr;
   lsSmartPointer<const lsGeometricAdvectDistribution<hrleCoordType, D>> dist =
@@ -40,9 +42,11 @@ template <class T, int D> class lsGeometricAdvect {
 
   static void incrementIndices(hrleVectorType<hrleIndexType, D> &indices,
                                const hrleVectorType<hrleIndexType, D> &min,
-                               const hrleVectorType<hrleIndexType, D> &max) {
+                               const hrleVectorType<hrleIndexType, D> &max)
+  {
     int dim = 0;
-    for (; dim < D - 1; ++dim) {
+    for (; dim < D - 1; ++dim)
+    {
       if (indices[dim] < max[dim])
         break;
       indices[dim] = min[dim];
@@ -59,13 +63,15 @@ public:
   lsGeometricAdvect(lsSmartPointer<lsDomain<T, D>> passedLevelSet,
                     lsSmartPointer<DistType> passedDist,
                     lsSmartPointer<lsDomain<T, D>> passedMaskLevelSet = nullptr)
-      : levelSet(passedLevelSet), maskLevelSet(passedMaskLevelSet) {
+      : levelSet(passedLevelSet), maskLevelSet(passedMaskLevelSet)
+  {
     dist = std::dynamic_pointer_cast<
         lsGeometricAdvectDistribution<hrleCoordType, D>>(passedDist);
   }
 
   /// Set the levelset which should be advected.
-  void setLevelSet(lsSmartPointer<lsDomain<T, D>> passedLevelSet) {
+  void setLevelSet(lsSmartPointer<lsDomain<T, D>> passedLevelSet)
+  {
     levelSet = passedLevelSet;
   }
 
@@ -74,7 +80,8 @@ public:
   template <class DistType, lsConcepts::IsBaseOf<
                                 lsGeometricAdvectDistribution<hrleCoordType, D>,
                                 DistType> = lsConcepts::assignable>
-  void setAdvectionDistribution(lsSmartPointer<DistType> passedDist) {
+  void setAdvectionDistribution(lsSmartPointer<DistType> passedDist)
+  {
     dist = std::dynamic_pointer_cast<
         lsGeometricAdvectDistribution<hrleCoordType, D>>(passedDist);
   }
@@ -82,20 +89,24 @@ public:
   /// Set the levelset, which should be used as a mask. This level set
   /// has to be wrapped by the levelset set by setLevelSet, so the mask
   /// is entirely inside the advected level set.
-  void setMaskLevelSet(lsSmartPointer<lsDomain<T, D>> passedMaskLevelSet) {
+  void setMaskLevelSet(lsSmartPointer<lsDomain<T, D>> passedMaskLevelSet)
+  {
     maskLevelSet = passedMaskLevelSet;
   }
 
   /// Perform geometrical advection.
-  void apply() {
-    if (levelSet == nullptr) {
+  void apply()
+  {
+    if (levelSet == nullptr)
+    {
       lsMessage::getInstance()
           .addWarning(
               "No level set passed to lsGeometricAdvect. Not Advecting.")
           .print();
       return;
     }
-    if (dist == nullptr) {
+    if (dist == nullptr)
+    {
       lsMessage::getInstance()
           .addWarning("No lsGeometricAdvectDistribution passed to "
                       "lsGeometricAdvect. Not "
@@ -107,7 +118,8 @@ public:
     // levelSet must have at least a width of 3
     lsExpand<T, D>(levelSet, 3).apply();
 
-    if (maskLevelSet != nullptr) {
+    if (maskLevelSet != nullptr)
+    {
       lsExpand<T, D>(maskLevelSet, 3).apply();
     }
 
@@ -139,13 +151,15 @@ public:
     hrleIndexType bounds[6];
     domain.getDomainBounds(bounds);
     hrleVectorType<hrleIndexType, D> min, max;
-    for (unsigned i = 0; i < D; ++i) {
+    for (unsigned i = 0; i < D; ++i)
+    {
       // translate from coords to indices
       distMin[i] =
           distBounds[2 * i] / gridDelta + ((distBounds[2 * i] < 0) ? -2 : 2);
       distMax[i] = distBounds[2 * i + 1] / gridDelta +
                    ((distBounds[2 * i + 1] < 0) ? -2 : 2);
-      if (distBounds[2 * i] >= 0) {
+      if (distBounds[2 * i] >= 0)
+      {
         distIsPositive = false;
       }
 
@@ -154,32 +168,46 @@ public:
       // TODO: respect periodic boundary condition
       min[i] = surfaceMesh->minimumExtent[i] / gridDelta;
       // TODO also do the same thing for positive point and etching
-      if (grid.isNegBoundaryInfinite(i) && minPointNegative && distMin[i] < 0) {
+      if (grid.isNegBoundaryInfinite(i) && minPointNegative && distMin[i] < 0)
+      {
         min[i] -= 2;
-      } else {
-        if (distIsPositive) {
+      }
+      else
+      {
+        if (distIsPositive)
+        {
           min[i] += distMin[i];
-        } else {
+        }
+        else
+        {
           min[i] -= distMin[i];
         }
       }
       // if calculated index is out of bounds, set the extent
       // TODO: need to add periodic BNC handling here
-      if (min[i] < grid.getMinGridPoint(i)) {
+      if (min[i] < grid.getMinGridPoint(i))
+      {
         min[i] = grid.getMinGridPoint(i);
       }
 
       max[i] = surfaceMesh->maximumExtent[i] / gridDelta;
-      if (grid.isPosBoundaryInfinite(i) && maxPointNegative && distMax[i] > 0) {
+      if (grid.isPosBoundaryInfinite(i) && maxPointNegative && distMax[i] > 0)
+      {
         max[i] += 2;
-      } else {
-        if (distIsPositive) {
+      }
+      else
+      {
+        if (distIsPositive)
+        {
           max[i] += distMax[i];
-        } else {
+        }
+        else
+        {
           max[i] -= distMax[i];
         }
       }
-      if (max[i] > grid.getMaxGridPoint(i)) {
+      if (max[i] > grid.getMaxGridPoint(i))
+      {
         max[i] = grid.getMaxGridPoint(i);
       }
     }
@@ -187,7 +215,8 @@ public:
     // Remove contribute points if they are part of the mask
     // If a mask is supplied, remove all contribute points which
     // lie on (or inside) the mask
-    if (maskLevelSet != nullptr) {
+    if (maskLevelSet != nullptr)
+    {
       // Go over all contribute points and see if they are on the mask surface
       auto &maskDomain = maskLevelSet->getDomain();
       auto values = surfaceMesh->getScalarData("LSValues");
@@ -196,16 +225,19 @@ public:
       auto newSurfaceMesh = lsSmartPointer<lsMesh<hrleCoordType>>::New();
       typename lsPointData<hrleCoordType>::ScalarDataType newValues;
       hrleConstSparseIterator<DomainType> maskIt(maskDomain);
-      for (auto &node : surfaceMesh->getNodes()) {
+      for (auto &node : surfaceMesh->getNodes())
+      {
         hrleVectorType<hrleIndexType, D> index;
-        for (unsigned i = 0; i < D; ++i) {
+        for (unsigned i = 0; i < D; ++i)
+        {
           index[i] = std::round(node[i] / gridDelta);
         }
         // can do sequential, because surfaceNodes are lexicographically sorted
         // from lsToDiskMesh
         maskIt.goToIndicesSequential(index);
         // if it is a mask point, mark it to maybe use it in new level set
-        if (!maskIt.isDefined() || !(maskIt.getValue() < *valueIt + 1e-5)) {
+        if (!maskIt.isDefined() || !(maskIt.getValue() < *valueIt + 1e-5))
+        {
           newSurfaceMesh->insertNextNode(node);
           newValues.push_back(*valueIt);
           // insert vertex
@@ -240,7 +272,6 @@ public:
                      "DEBUG_lsGeomAdvectMesh_initial.vtp")
           .apply();
     }
-
 #endif
 
     typedef std::vector<std::array<hrleCoordType, 3>> SurfaceNodesType;
@@ -252,17 +283,20 @@ public:
     {
       unsigned long long numPoints = 1;
       unsigned long long pointsPerDimension[D];
-      for (unsigned i = 0; i < D; ++i) {
+      for (unsigned i = 0; i < D; ++i)
+      {
         pointsPerDimension[i] = numPoints;
         numPoints *= max[i] - min[i];
       }
       unsigned long numberOfSegments = domain.getNumberOfSegments();
       unsigned long long pointsPerSegment = numPoints / numberOfSegments;
       unsigned long long pointId = 0;
-      for (unsigned i = 0; i < numberOfSegments - 1; ++i) {
+      for (unsigned i = 0; i < numberOfSegments - 1; ++i)
+      {
         pointId = pointsPerSegment * (i + 1);
         hrleVectorType<hrleIndexType, D> segmentPoint;
-        for (int j = D - 1; j >= 0; --j) {
+        for (int j = D - 1; j >= 0; --j)
+        {
           segmentPoint[j] = pointId / (pointsPerDimension[j]) + min[j];
           pointId %= pointsPerDimension[j];
         }
@@ -296,9 +330,12 @@ public:
 #endif
 
       hrleVectorType<hrleIndexType, D> startVector;
-      if (p == 0) {
+      if (p == 0)
+      {
         startVector = min;
-      } else {
+      }
+      else
+      {
         startVector = segmentation[p - 1];
         incrementIndices(startVector, min, max);
       }
@@ -313,7 +350,8 @@ public:
 
       // Mask iterator for checking whether inside mask or not
       lsSmartPointer<hrleConstSparseIterator<DomainType>> maskIt = nullptr;
-      if (maskLevelSet != nullptr) {
+      if (maskLevelSet != nullptr)
+      {
         maskIt = lsSmartPointer<hrleConstSparseIterator<DomainType>>::New(
             maskLevelSet->getDomain(), startVector);
       }
@@ -321,16 +359,21 @@ public:
       // Iterate through the bounds of new lsDomain lexicographically
       for (hrleVectorType<hrleIndexType, D> currentIndex = startVector;
            currentIndex <= endVector;
-           incrementIndices(currentIndex, min, max)) {
+           incrementIndices(currentIndex, min, max))
+      {
         // if point is already full in old level set, skip it
         checkIt.goToIndicesSequential(currentIndex);
         T oldValue = checkIt.getValue();
         // if run is already negative undefined, just ignore the point
-        if (distIsPositive) {
-          if (oldValue < -cutoffValue) {
+        if (distIsPositive)
+        {
+          if (oldValue < -cutoffValue)
+          {
             continue;
           }
-        } else if (oldValue > cutoffValue) {
+        }
+        else if (oldValue > cutoffValue)
+        {
           continue;
         }
 
@@ -338,17 +381,20 @@ public:
         std::array<hrleCoordType, 3> currentDistMin{};
         std::array<hrleCoordType, 3> currentDistMax{};
 
-        for (unsigned i = 0; i < D; ++i) {
+        for (unsigned i = 0; i < D; ++i)
+        {
           currentCoords[i] = currentIndex[i] * gridDelta;
 
           currentDistMin[i] = currentIndex[i] - std::abs(distMin[i]);
-          if (currentDistMin[i] < grid.getMinGridPoint(i)) {
+          if (currentDistMin[i] < grid.getMinGridPoint(i))
+          {
             currentDistMin[i] = grid.getMinGridPoint(i);
           }
           currentDistMin[i] *= gridDelta;
 
           currentDistMax[i] = currentIndex[i] + std::abs(distMax[i]);
-          if (currentDistMin[i] > grid.getMaxGridPoint(i)) {
+          if (currentDistMin[i] > grid.getMaxGridPoint(i))
+          {
             currentDistMin[i] = grid.getMaxGridPoint(i);
           }
           currentDistMax[i] *= gridDelta;
@@ -359,27 +405,32 @@ public:
         // now check which surface points contribute to currentIndex
         for (typename SurfaceNodesType::const_iterator surfIt =
                  surfaceNodes.begin();
-             surfIt != surfaceNodes.end(); ++surfIt) {
+             surfIt != surfaceNodes.end(); ++surfIt)
+        {
 
           auto &currentNode = *surfIt;
 
           // if we are outside min/max go to next index inside
           {
             bool outside = false;
-            for (unsigned i = 0; i < D; ++i) {
+            for (unsigned i = 0; i < D; ++i)
+            {
               if ((currentNode[i] < currentDistMin[i]) ||
-                  (currentNode[i] > currentDistMax[i])) {
+                  (currentNode[i] > currentDistMax[i]))
+              {
                 outside = true;
                 break;
               }
             }
-            if (outside) {
+            if (outside)
+            {
               continue;
             }
           }
 
           // TODO: does this really save time? Try without it.
-          if (!dist->isInside(currentNode, currentCoords, 2 * gridDelta)) {
+          if (!dist->isInside(currentNode, currentCoords, 2 * gridDelta))
+          {
             continue;
           }
 
@@ -388,22 +439,29 @@ public:
               dist->getSignedDistance(currentNode, currentCoords) / gridDelta;
 
           // if cell is far within a distribution, set it filled
-          if (distIsPositive) {
-            if (tmpDistance <= -cutoffValue) {
+          if (distIsPositive)
+          {
+            if (tmpDistance <= -cutoffValue)
+            {
               distance = std::numeric_limits<T>::lowest();
               break;
             }
 
-            if (tmpDistance < distance) {
+            if (tmpDistance < distance)
+            {
               distance = tmpDistance;
             }
-          } else {
-            if (tmpDistance >= cutoffValue) {
+          }
+          else
+          {
+            if (tmpDistance >= cutoffValue)
+            {
               distance = std::numeric_limits<T>::max();
               break;
             }
 
-            if (tmpDistance > distance) {
+            if (tmpDistance > distance)
+            {
               distance = tmpDistance;
             }
           }
@@ -412,38 +470,53 @@ public:
         // TODO: There are still issues with positive box distributions
         // if there is a mask used!
         // if point is part of the mask, keep smaller value
-        if (maskLevelSet != nullptr) {
+        if (maskLevelSet != nullptr)
+        {
           maskIt->goToIndicesSequential(currentIndex);
 
           // if dist is positive, flip logic of comparison
           if (distIsPositive ^
-              (std::abs(oldValue - maskIt->getValue()) < 1e-6)) {
-            if (!distIsPositive && std::abs(oldValue) <= cutoffValue) {
+              (std::abs(oldValue - maskIt->getValue()) < 1e-6))
+          {
+            if (!distIsPositive && std::abs(oldValue) <= cutoffValue)
+            {
               newPoints[p].push_back(std::make_pair(currentIndex, oldValue));
               continue;
             }
-          } else {
-            if (distance != initialDistance) {
+          }
+          else
+          {
+            if (distance != initialDistance)
+            {
               distance = std::min(maskIt->getValue(), distance);
-            } else if (distIsPositive || oldValue >= 0.) {
+            }
+            else if (distIsPositive || oldValue >= 0.)
+            {
               newPoints[p].push_back(std::make_pair(currentIndex, oldValue));
               continue;
             }
           }
         }
 
-        if (std::abs(distance) <= cutoffValue) {
+        if (std::abs(distance) <= cutoffValue)
+        {
           // avoid using distribution in wrong direction
-          if (distIsPositive && oldValue >= 0.) {
+          if (distIsPositive && oldValue >= 0.)
+          {
             newPoints[p].push_back(
                 std::make_pair(currentIndex, distance - numericEps));
-          } else if (!distIsPositive && oldValue <= 0.) {
+          }
+          else if (!distIsPositive && oldValue <= 0.)
+          {
             // if we are etching, need to make sure, we are not inside mask
-            if (maskIt == nullptr || maskIt->getValue() > -cutoffValue) {
+            if (maskIt == nullptr || maskIt->getValue() > -cutoffValue)
+            {
               newPoints[p].push_back(
                   std::make_pair(currentIndex, distance - numericEps));
             }
-          } else {
+          }
+          else
+          {
             // this only happens if distribution is very small, < 2 * gridDelta
             newPoints[p].push_back(std::make_pair(currentIndex, oldValue));
           }
@@ -454,11 +527,13 @@ public:
     // copy all points into the first vector
     {
       unsigned long long numberOfPoints = newPoints[0].size();
-      for (unsigned i = 1; i < domain.getNumberOfSegments(); ++i) {
+      for (unsigned i = 1; i < domain.getNumberOfSegments(); ++i)
+      {
         numberOfPoints += newPoints[i].size();
       }
       newPoints[0].reserve(numberOfPoints);
-      for (unsigned i = 1; i < domain.getNumberOfSegments(); ++i) {
+      for (unsigned i = 1; i < domain.getNumberOfSegments(); ++i)
+      {
         std::move(std::begin(newPoints[i]), std::end(newPoints[i]),
                   std::back_inserter(newPoints[0]));
       }
@@ -468,9 +543,11 @@ public:
     // output all points directly to mesh
     {
       std::vector<T> scalarData;
-      for (auto it = newPoints[0].begin(); it != newPoints[0].end(); ++it) {
+      for (auto it = newPoints[0].begin(); it != newPoints[0].end(); ++it)
+      {
         std::array<T, 3> node = {};
-        for (unsigned i = 0; i < D; ++i) {
+        for (unsigned i = 0; i < D; ++i)
+        {
           node[i] = T((it->first)[i]) * gridDelta;
         }
 

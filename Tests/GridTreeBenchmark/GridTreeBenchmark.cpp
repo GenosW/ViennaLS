@@ -17,6 +17,7 @@
 //#define LS_TREE
 #include <lsTree.hpp>
 #include <lsVTKWriter.hpp>
+#include <lsTestAs>
 
 using results_container = std::vector<std::tuple<int, int, double>>;
 
