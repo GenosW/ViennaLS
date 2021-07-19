@@ -160,29 +160,30 @@ lsTestStatus testTree(void)
                   [N](auto item)
                   { return item == N; }));
 
-  // --- DiskMesh
-  // std::cout << "DiskMesh: " << std::endl;
-  // lsToDiskMesh<double, D>(levelSet, mesh).apply();
-  // lsVTKWriter(mesh, lsFileFormatEnum::VTU, prefix + "_DiskMesh.vtu").apply();
+  //---DiskMesh
+  std::cout
+      << "DiskMesh: " << std::endl;
+  lsToDiskMesh<double, D>(levelSet, mesh).apply();
+  lsVTKWriter(mesh, lsFileFormatEnum::VTU, prefix + "_DiskMesh.vtu").apply();
 
-  // auto tree2 = lsTree<double, D>(mesh);
-  // tree2.apply();
-  // lsVTKWriter(mesh, lsFileFormatEnum::VTU, prefix + "_TreeDiskMesh.vtu").apply();
+  auto tree2 = lsTree<double, D>(mesh);
+  tree2.apply();
+  lsVTKWriter(mesh, lsFileFormatEnum::VTU, prefix + "_TreeDiskMesh.vtu").apply();
 
-  // numLevels = tree2.getDepth();
-  // ptsInTree = std::vector<size_t>(numLevels + 1, 0);
-  // for (auto &node : tree.getTreeNodes())
-  // {
-  //   // std::cout << "{color: " << node->color
-  //   //           << " / level: " << node->level
-  //   //           << " / isLeaf: " << node->isLeaf
-  //   //           << "} -> size:" << node->size() << std::endl;
-  //   ptsInTree[node->level] += node->size();
-  // }
-  // LSTEST_ASSERT(
-  //     std::all_of(ptsInTree.cbegin(), ptsInTree.cend(),
-  //                 [N](auto item)
-  //                 { return item == N; }));
+  numLevels = tree2.getDepth();
+  ptsInTree = std::vector<size_t>(numLevels + 1, 0);
+  for (auto &node : tree.getTreeNodes())
+  {
+    // std::cout << "{color: " << node->color
+    //           << " / level: " << node->level
+    //           << " / isLeaf: " << node->isLeaf
+    //           << "} -> size:" << node->size() << std::endl;
+    ptsInTree[node->level] += node->size();
+  }
+  LSTEST_ASSERT(
+      std::all_of(ptsInTree.cbegin(), ptsInTree.cend(),
+                  [N](auto item)
+                  { return item == N; }));
 
   // PASS!
   return lsTestStatus::SUCCESS;

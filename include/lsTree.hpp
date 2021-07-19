@@ -539,10 +539,8 @@ private:
   /// Builds the tree level-by-level
   ///
   ///
-  /// TODO: Use Iterators (begin/end) instead of start/stop
-  template <class Vector, class VectorOfPointers, class VectorData>
-  size_t
-  buildLevel(Vector &sortedPoints, VectorOfPointers &orders, VectorData &originalData, size_t level)
+  template <class Pointer>
+  size_t buildLevel(index_vector &sortedPoints, std::vector<Pointer> &orders, size_t level)
   {
     depth = level; // new level --> set tree depth
     size_t num_nodes = pow2(level);
@@ -565,7 +563,8 @@ private:
 
       // Sort Range of the root
       // sortByIdxRange(data_begin + start, data_begin + stop, order_begin, order_end);
-      sortByDim(sortedPoints.begin() + start, sortedPoints.begin() + stop, root->dim);
+      if (level - 1 != 0) // otherwise already sorted
+        sortByDim(sortedPoints.begin() + start, sortedPoints.begin() + stop, root->dimSplit);
 
       size_t dim = getNextDim(level);
       // Make 2 new nodes
