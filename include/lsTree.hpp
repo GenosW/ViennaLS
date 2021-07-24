@@ -48,6 +48,48 @@ T pointDistance(Iter_T first, Iter_T last, Iter2_T first2)
   return ret > 0.0 ? sqrt(ret) : 0.0;
 }
 
+enum class Dimension : uint
+{
+  START,
+  x = 1,
+  y = 2,
+  z = 3,
+  END
+};
+
+std::ostream &operator<<(std::ostream &os, Dimension dim)
+{
+  switch (dim)
+  {
+  case Dimension::x:
+    os << "x";
+    break;
+  case Dimension::y:
+    os << "y";
+    break;
+  case Dimension::z:
+    os << "z";
+    break;
+  default:
+    os.setstate(std::ios_base::failbit);
+  }
+  return os;
+}
+Dimension &operator++(Dimension &dim)
+{
+  dim = static_cast<Dimension>(static_cast<uint>(dim) + 1);
+  if (dim == Dimension::END)
+    dim = Dimension::x;
+  return dim;
+}
+Dimension &operator--(Dimension &dim)
+{
+  dim = static_cast<Dimension>(static_cast<uint>(dim) - 1);
+  if (dim == Dimension::START)
+    dim = Dimension::z;
+  return dim;
+}
+
 // template <typename T>
 // struct lsSpan
 // {
@@ -93,7 +135,7 @@ public:
     size_t stop = 0;
     size_t level = 0;
     int color = 0;
-    size_t dimSplit = 0;
+    Dimension dimSplit = static_cast<Dimension>(1);
     std::string identifier = "";
 
     lsSmartPointer<treeNode> parent = nullptr;
@@ -570,12 +612,12 @@ private:
       // Make 2 new nodes
       // median = lookup Point from original data
       T median = data[sortedPoints[start + leftRange / 2]][dim];
-      lsSmartPointer<treeNode> left = lsSmartPointer<treeNode>::New(level, dim, start, start + leftRange, median, root);
-      root->left = left;
+      root->left = lsSmartPointer<treeNode>::New(level, dim, start, start + leftRange, median, root);
+      //root->left = left;
 
       median = data[sortedPoints[start + leftRange + rightRange / 2]][dim];
-      lsSmartPointer<treeNode> right = lsSmartPointer<treeNode>::New(level, dim, start + leftRange, stop, median, root);
-      root->right = right;
+      root->right = lsSmartPointer<treeNode>::New(level, dim, start + leftRange, stop, median, root);
+      //root->right = right;
 
 #ifndef NDEBUG // if in debug build
       {
@@ -584,14 +626,14 @@ private:
           identifier = "y";
         if (root->dimSplit == 0)
           identifier = "x";
-        left->identifyAs(identifier + " < " + std::to_string(root->median));
-        right->identifyAs(identifier + " > " + std::to_string(root->median));
+        root->left->identifyAs(identifier + " < " + std::to_string(root->median));
+        root->right->identifyAs(identifier + " > " + std::to_string(root->median));
       }
 #endif
 
       // Insert pointers to new nodes into vector
-      levelNodes.push_back(left);
-      levelNodes.push_back(right);
+      levelNodes.push_back(root->left);
+      levelNodes.push_back(root->right);
     }
 
     size_t thisLevelStart = treeNodes.size();
