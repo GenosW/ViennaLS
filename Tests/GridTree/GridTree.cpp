@@ -195,7 +195,7 @@ int main(int argc, char **argv)
   MAKE_LSTEST(test_3d);
 
   test_2d.run(testTree<2>);
-  // test_3d.run(testTree<3>);
+  test_3d.run(testTree<3>);
 
   std::cout << "------------- RESUMÉ -------------" << std::endl;
 
