@@ -400,6 +400,7 @@ public:
 
 #ifndef NDEBUG // if in debug build
     {
+
       lsMessage::getInstance()
           .addDebug("lsTree: Building in DEBUG mode")
           .print();
