@@ -6,6 +6,7 @@
 #include <vector>
 #include <utility>
 #include <cstdint>
+#include <lsDimension.hpp>
 #include <lsToDiskMesh.hpp>
 #include <lsSmartPointer.hpp>
 
@@ -29,49 +30,14 @@ constexpr int64_t divByPow2(int num, int exp)
   return num >> exp;
 }
 
-enum class Dimension : uint
+template <int D>
+size_t inline convertToIndex(Dimension<D> dim)
 {
-  START = 0,
-  x = 1,
-  y = 2,
-  z = 3,
-  END = 4
-};
-
-std::ostream &operator<<(std::ostream &os, Dimension dim)
-{
-  switch (dim)
-  {
-  case Dimension::x:
-    os << "x";
-    break;
-  case Dimension::y:
-    os << "y";
-    break;
-  case Dimension::z:
-    os << "z";
-    break;
-  default:
-    os.setstate(std::ios_base::failbit);
-  }
-  return os;
-}
-Dimension &operator++(Dimension &dim)
-{
-  dim = static_cast<Dimension>(static_cast<uint>(dim) + 1);
-  if (dim == Dimension::END)
-    dim = Dimension::x;
-  return dim;
-}
-Dimension &operator--(Dimension &dim)
-{
-  dim = static_cast<Dimension>(static_cast<uint>(dim) - 1);
-  if (dim == Dimension::START)
-    dim = Dimension::z;
-  return dim;
+  return dim.toArrayIndex();
 }
 
 #pragma endregion
+
 /// Tree structure that seperates a domain
 ///
 /// TODO: clean up parameters, member functions and attributes
@@ -93,6 +59,7 @@ class lsTree
 {
   // ---------- Typedefs etc. ----------
 public:
+  using Dim = Dimension<D>;
   using value_type = T;
   using size_type = std::size_t;
 
@@ -107,7 +74,7 @@ public:
     size_t stop = 0;
     size_t level = 0;
     int color = 0;
-    Dimension dimSplit = static_cast<Dimension>(1);
+    Dim dimSplit = Dim(D);
     std::string identifier = "";
 
     lsSmartPointer<treeNode> parent = nullptr;
@@ -120,19 +87,19 @@ public:
     {
     }
 
-    treeNode(size_t level_, size_t dim, size_t start_, size_t stop_, T median_, lsSmartPointer<treeNode> parent_) : level(level_), dimSplit(static_cast<Dimension>(dim)), start(start_), stop(stop_), median(median_), parent(parent_)
+    treeNode(size_t level_, size_t dim, size_t start_, size_t stop_, T median_, lsSmartPointer<treeNode> parent_) : level(level_), dimSplit(static_cast<Dim>(dim)), start(start_), stop(stop_), median(median_), parent(parent_)
     {
     }
 
-    treeNode(size_t level_, size_t dim, size_t start_, size_t stop_, T median_) : level(level_), dimSplit(static_cast<Dimension>(dim)), start(start_), stop(stop_), median(median_)
+    treeNode(size_t level_, size_t dim, size_t start_, size_t stop_, T median_) : level(level_), dimSplit(static_cast<Dim>(dim)), start(start_), stop(stop_), median(median_)
     {
     }
 
-    treeNode(size_t level_, Dimension dim, size_t start_, size_t stop_, T median_, lsSmartPointer<treeNode> parent_) : level(level_), dimSplit(dim), start(start_), stop(stop_), median(median_), parent(parent_)
+    treeNode(size_t level_, Dim dim, size_t start_, size_t stop_, T median_, lsSmartPointer<treeNode> parent_) : level(level_), dimSplit(dim), start(start_), stop(stop_), median(median_), parent(parent_)
     {
     }
 
-    treeNode(size_t level_, Dimension dim, size_t start_, size_t stop_, T median_) : level(level_), dimSplit(dim), start(start_), stop(stop_), median(median_)
+    treeNode(size_t level_, Dim dim, size_t start_, size_t stop_, T median_) : level(level_), dimSplit(dim), start(start_), stop(stop_), median(median_)
     {
     }
 
@@ -451,6 +418,9 @@ public:
     std::generate(sortedPoints.begin(), sortedPoints.end(), [n = 0]() mutable
                   { return n++; });
 
+    if (dimToSort != D - 1)
+      std::cout << "OOPS" << std::endl;
+
     // Example
     // Global order
     // x: 0, 5, 3, 2, 1, 6, 4, 7,
@@ -467,7 +437,7 @@ public:
       // Build the tree
       size_t binSize = N; // root node is parent to all data points
       // in-place construction of root
-      treeNodes.emplace_back(lsSmartPointer<treeNode>::New(0, dimToSort, 0, N, data[sortedPoints[N / 2]][dimToSort]));
+      treeNodes.emplace_back(lsSmartPointer<treeNode>::New(0, D, 0, N, data[sortedPoints[N / 2]][D]));
 
       for (size_t level = 1; (level < maxDepth + 1) && (binSize > maxPointsPerBin); ++level)
       {
@@ -498,7 +468,7 @@ public:
           color[index] = treeNode->color;
         }
       }
-      mesh->insertNextScalarData(color, "color");
+      mesh->getPointData().insertNextScalarData(color, "color"); // adjustment for new ViennaLS
     }
     /// TODO: Implement and support byDepth build properly
     if (!byLevel)
@@ -508,17 +478,23 @@ public:
   }
 
 private:
-  size_t constexpr getNextDim(size_type level)
+  // Dimension constexpr getNextDim(Dimension dim)
+  // {
+  //   Dimension next_dim(dim);
+  //   ++next_dim;
+  //   return next_dim;
+  // }
+
+  size_t constexpr getNextDimIdx(size_type level)
   {
     return D - 1 - level % (D);
   }
 
-  size_t constexpr getNextDim(Dimension dim)
-  {
-    Dimension next_dim(dim);
-    ++next_dim;
-    return static_cast<size_t>(next_dim);
-  }
+  // size_t constexpr getNextDimIdx(Dimension dim)
+  // {
+  //   Dimension next_dim = getNextDim(dim);
+  //   return static_cast<size_t>(next_dim);
+  // }
 
   /// Builds the tree level-by-level
   ///
@@ -546,17 +522,18 @@ private:
       const size_t rightRange = range - leftRange;
 
       // Sort Range of the root
-      if (level > 1) // otherwise already sorted
-        sortByDim(sortedPoints.begin() + start, sortedPoints.begin() + stop, static_cast<uint>(root->dimSplit));
+      //if (level > 1) // otherwise already sorted
+      size_t sortDimIdx = convertToIndex(root->dimSplit);
+      sortByDim(sortedPoints.begin() + start, sortedPoints.begin() + stop, sortDimIdx);
 
-      size_t dim = getNextDim(root->dimSplit);
+      Dim nextSplitDim = root->dimSplit--;
       // Make 2 new nodes
       // median = lookup Point from original data
-      T median = data[sortedPoints[start + leftRange / 2]][dim];
-      root->left = lsSmartPointer<treeNode>::New(level, dim, start, start + leftRange, median, root);
+      T median = data[sortedPoints[start + leftRange / 2]][sortDimIdx];
+      root->left = lsSmartPointer<treeNode>::New(level, nextSplitDim, start, start + leftRange, median, root);
 
-      median = data[sortedPoints[start + leftRange + rightRange / 2]][dim];
-      root->right = lsSmartPointer<treeNode>::New(level, dim, start + leftRange, stop, median, root);
+      median = data[sortedPoints[start + leftRange + rightRange / 2]][sortDimIdx];
+      root->right = lsSmartPointer<treeNode>::New(level, nextSplitDim, start + leftRange, stop, median, root);
 
 #ifndef NDEBUG // if in debug build
       {
@@ -742,9 +719,9 @@ public:
       if (node->identifier == "")
       {
         std::string dim = "z";
-        if (node->dimSplit == Dimension::y)
+        if (node->dimSplit() == Dim::y)
           dim = "y";
-        if (node->dimSplit == Dimension::x)
+        if (node->dimSplit() == Dim::x)
           dim = "x";
         std::cout << "(" << node->color << " / " << dim << " / " << node->median << ")" << std::endl;
       }
