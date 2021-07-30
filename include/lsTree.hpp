@@ -350,14 +350,14 @@ public:
   //~lsTree() {}
 
   /// entry point
-  void apply(bool byLevel = true)
+  lsTree &apply(bool byLevel = true)
   {
     if (mesh == nullptr)
     {
       lsMessage::getInstance()
           .addWarning("No mesh was passed to lsTree.")
           .print();
-      return;
+      return *this;
     }
     uint maxNumberOfNodes = pow2(maxDepth + 1) - 1;
     treeNodes.reserve(maxNumberOfNodes);
@@ -385,41 +385,12 @@ public:
     }
 #endif
 
-    index_vector x;
-    index_vector y;
-    index_vector z;
     index_vector sortedPoints;
 
-    std::vector<lsSmartPointer<index_vector>> orders;
-
-    // 1.Generate absolute orders in each dimension
-    // Sort in z/y axis (D=3/D=2)
-    // Nodes are already sorted correctly in highest dimension (D=3 -> z / D=2 -> y)
-    // Sort in x dimension (always)
-    size_t dimToSort = 0;
-    auto x_idx = lsSmartPointer<index_vector>::New(argsortInDimension(data.begin(), dimToSort, N));
-    // orders.push_back(x_idx);
-
-    // Sort in y dimension (if D = 3)
-    if constexpr (D > 2)
-    {
-      dimToSort++;
-      auto y_idx = lsSmartPointer<index_vector>::New(argsortInDimension(data.begin(), dimToSort, N));
-      // orders.push_back(y_idx);
-    }
-
-    dimToSort++;
-    auto z_idx = lsSmartPointer<index_vector>::New(N);
-    std::generate(z_idx->begin(), z_idx->end(), [n = 0]() mutable
-                  { return n++; });
-    //orders.push_back(z_idx);
     // Nodes are already sorted correctly in highest dimension (D=3 -> z / D=2 -> y)
     sortedPoints = index_vector(N);
     std::generate(sortedPoints.begin(), sortedPoints.end(), [n = 0]() mutable
                   { return n++; });
-
-    if (dimToSort != D - 1)
-      std::cout << "OOPS" << std::endl;
 
     // Example
     // Global order
@@ -443,7 +414,7 @@ public:
       {
         startLeafs = treeNodes.size();
 
-        const size_t nodesAdded = buildLevel(sortedPoints, orders, level);
+        const size_t nodesAdded = buildLevel(sortedPoints, level);
 
         // Compute largest bin of this Level
         for (auto nodeIt = beginLeafs(); nodeIt < treeNodes.end(); ++nodeIt)
@@ -473,8 +444,9 @@ public:
     /// TODO: Implement and support byDepth build properly
     if (!byLevel)
     {
-      auto root = buildByDepth(sortedPoints, orders, data, 0, N, 0);
+      auto root = buildByDepth(sortedPoints, data, 0, N, 0);
     }
+    return *this;
   }
 
 private:
@@ -499,8 +471,7 @@ private:
   /// Builds the tree level-by-level
   ///
   ///
-  template <class Pointer>
-  size_t buildLevel(index_vector &sortedPoints, std::vector<Pointer> &orders, size_t level)
+  size_t buildLevel(index_vector &sortedPoints, size_t level)
   {
     depth = level; // new level --> set tree depth
     const size_t num_parents = treeNodes.size();
@@ -558,8 +529,8 @@ private:
   ///
   /// checks if it should be a leaf treeNode
   /// TODO: Messy template
-  template <class Vector, class VectorOfPointers, class VectorData>
-  lsSmartPointer<treeNode> buildByDepth(Vector &data, VectorOfPointers &orders, VectorData &originalData, size_t start, size_t stop, size_t level)
+  template <class Vector, class VectorData>
+  lsSmartPointer<treeNode> buildByDepth(Vector &data, VectorData &originalData, size_t start, size_t stop, size_t level)
   {
     size_t range = stop - start;
     if ((range < maxPointsPerBin) || (level > maxDepth))
@@ -579,8 +550,8 @@ private:
     // thisNode->level = level;
     // thisNode->dimensionToSplit = dim;
 
-    thisNode->left = buildByDepth(data, orders, originalData, start, start + leftRange, level + 1);
-    thisNode->right = buildByDepth(data, orders, originalData, start + leftRange, stop, level + 1);
+    thisNode->left = buildByDepth(data, originalData, start, start + leftRange, level + 1);
+    thisNode->right = buildByDepth(data, originalData, start + leftRange, stop, level + 1);
     //thisNode->isLeaf = (thisNode->left != nullptr || thisNode->right != nullptr ) ? false : true;
 
     return thisNode;
