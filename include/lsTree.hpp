@@ -74,7 +74,7 @@ public:
     size_t stop = 0;
     size_t level = 0;
     int color = 0;
-    Dim dimSplit = Dim(D);
+    Dim dimensionToSplit = Dim(D);
     std::string identifier = "";
 
     lsSmartPointer<treeNode> parent = nullptr;
@@ -87,19 +87,19 @@ public:
     {
     }
 
-    treeNode(size_t level_, size_t dim, size_t start_, size_t stop_, T median_, lsSmartPointer<treeNode> parent_) : level(level_), dimSplit(static_cast<Dim>(dim)), start(start_), stop(stop_), median(median_), parent(parent_)
+    treeNode(size_t level_, size_t dim, size_t start_, size_t stop_, T median_, lsSmartPointer<treeNode> parent_) : level(level_), dimensionToSplit(static_cast<Dim>(dim)), start(start_), stop(stop_), median(median_), parent(parent_)
     {
     }
 
-    treeNode(size_t level_, size_t dim, size_t start_, size_t stop_, T median_) : level(level_), dimSplit(static_cast<Dim>(dim)), start(start_), stop(stop_), median(median_)
+    treeNode(size_t level_, size_t dim, size_t start_, size_t stop_, T median_) : level(level_), dimensionToSplit(static_cast<Dim>(dim)), start(start_), stop(stop_), median(median_)
     {
     }
 
-    treeNode(size_t level_, Dim dim, size_t start_, size_t stop_, T median_, lsSmartPointer<treeNode> parent_) : level(level_), dimSplit(dim), start(start_), stop(stop_), median(median_), parent(parent_)
+    treeNode(size_t level_, Dim dim, size_t start_, size_t stop_, T median_, lsSmartPointer<treeNode> parent_) : level(level_), dimensionToSplit(dim), start(start_), stop(stop_), median(median_), parent(parent_)
     {
     }
 
-    treeNode(size_t level_, Dim dim, size_t start_, size_t stop_, T median_) : level(level_), dimSplit(dim), start(start_), stop(stop_), median(median_)
+    treeNode(size_t level_, Dim dim, size_t start_, size_t stop_, T median_) : level(level_), dimensionToSplit(dim), start(start_), stop(stop_), median(median_)
     {
     }
 
@@ -121,7 +121,7 @@ public:
 
     bool belowMedian(const point_type &pt)
     {
-      return pt[dimSplit] <= median;
+      return pt[dimensionToSplit] <= median;
     }
 
     void assignColor(size_t colorAssign)
@@ -398,21 +398,21 @@ public:
     // Sort in x dimension (always)
     size_t dimToSort = 0;
     auto x_idx = lsSmartPointer<index_vector>::New(argsortInDimension(data.begin(), dimToSort, N));
-    orders.push_back(x_idx);
+    // orders.push_back(x_idx);
 
     // Sort in y dimension (if D = 3)
     if constexpr (D > 2)
     {
       dimToSort++;
       auto y_idx = lsSmartPointer<index_vector>::New(argsortInDimension(data.begin(), dimToSort, N));
-      orders.push_back(y_idx);
+      // orders.push_back(y_idx);
     }
 
     dimToSort++;
     auto z_idx = lsSmartPointer<index_vector>::New(N);
     std::generate(z_idx->begin(), z_idx->end(), [n = 0]() mutable
                   { return n++; });
-    orders.push_back(z_idx);
+    //orders.push_back(z_idx);
     // Nodes are already sorted correctly in highest dimension (D=3 -> z / D=2 -> y)
     sortedPoints = index_vector(N);
     std::generate(sortedPoints.begin(), sortedPoints.end(), [n = 0]() mutable
@@ -523,10 +523,10 @@ private:
 
       // Sort Range of the root
       //if (level > 1) // otherwise already sorted
-      size_t sortDimIdx = convertToIndex(root->dimSplit);
+      size_t sortDimIdx = convertToIndex(root->dimensionToSplit);
       sortByDim(sortedPoints.begin() + start, sortedPoints.begin() + stop, sortDimIdx);
 
-      Dim nextSplitDim = root->dimSplit--;
+      Dim nextSplitDim = root->dimensionToSplit--;
       // Make 2 new nodes
       // median = lookup Point from original data
       T median = data[sortedPoints[start + leftRange / 2]][sortDimIdx];
@@ -538,10 +538,10 @@ private:
 #ifndef NDEBUG // if in debug build
       {
         std::ostringstream leftId;
-        leftId << root->dimSplit << " < " << root->median;
+        leftId << root->dimensionToSplit << " < " << root->median;
         root->left->identifyAs(leftId.str());
         std::ostringstream rightId;
-        rightId << root->dimSplit << " > " << root->median;
+        rightId << root->dimensionToSplit << " > " << root->median;
         root->right->identifyAs(rightId.str());
       }
 #endif
@@ -577,7 +577,7 @@ private:
     treeNodes.push_back(thisNode);
     // thisNode->setRange(start, stop);
     // thisNode->level = level;
-    // thisNode->dimSplit = dim;
+    // thisNode->dimensionToSplit = dim;
 
     thisNode->left = buildByDepth(data, orders, originalData, start, start + leftRange, level + 1);
     thisNode->right = buildByDepth(data, orders, originalData, start + leftRange, stop, level + 1);
@@ -719,9 +719,9 @@ public:
       if (node->identifier == "")
       {
         std::string dim = "z";
-        if (node->dimSplit() == Dim::y)
+        if (node->dimensionToSplit() == Dim::y)
           dim = "y";
-        if (node->dimSplit() == Dim::x)
+        if (node->dimensionToSplit() == Dim::x)
           dim = "x";
         std::cout << "(" << node->color << " / " << dim << " / " << node->median << ")" << std::endl;
       }

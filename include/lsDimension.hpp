@@ -82,12 +82,6 @@ struct Dimension
     return new_dim;
   }
 
-  template <typename T = size_t>
-  T toArrayIndex()
-  {
-    return static_cast<T>(value) - 1;
-  }
-
   bool operator==(Dimension &other)
   {
     return other.value == this->value;
@@ -96,6 +90,17 @@ struct Dimension
   bool operator!=(Dimension &other)
   {
     return other.value != this->value;
+  }
+
+  operator enum_type() const
+  {
+    return toArrayIndex<enum_type>();
+  }
+
+  template <typename T = size_t>
+  T toArrayIndex() const
+  {
+    return static_cast<T>(value) - 1;
   }
 };
 #endif // LS_DIMENSION

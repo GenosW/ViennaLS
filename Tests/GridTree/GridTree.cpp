@@ -34,11 +34,11 @@ void checkTree(lsTree<double, D> treeToCheck, size_t N)
   std::vector<size_t> ptsInTree(numLevels + 1, 0);
   for (auto &node : treeToCheck.getTreeNodes())
   {
-    // std::cout << node->identifier << node->dimSplit << " ?= " << orderOfDims[node->level] << std::endl;
-    // std::cout << node->dimSplit << " ?= " << orderOfDims[node->level] << std::endl;
+    // std::cout << node->identifier << node->dimensionToSplit << " ?= " << orderOfDims[node->level] << std::endl;
+    // std::cout << node->dimensionToSplit << " ?= " << orderOfDims[node->level] << std::endl;
     ptsInTree[node->level] += node->size();
     // Check if node was split in correct dimension
-    LSTEST_ASSERT(node->dimSplit == orderOfDims[node->level]);
+    LSTEST_ASSERT(node->dimensionToSplit == orderOfDims[node->level]);
   }
   // Check if all points were sorted and are present in each level of tree
   LSTEST_ASSERT(
