@@ -22,6 +22,7 @@ template <class T, int D> class lsToSurfaceMesh {
   lsSmartPointer<lsMesh<T>> mesh = nullptr;
   // std::vector<hrleIndexType> meshNodeToPointIdMapping;
   const T epsilon;
+  bool updatePointData = true;
 
 public:
   lsToSurfaceMesh(double eps = 1e-12) : epsilon(eps) {}
@@ -35,6 +36,8 @@ public:
   }
 
   void setMesh(lsSmartPointer<lsMesh<T>> passedMesh) { mesh = passedMesh; }
+
+  void setUpdatePointData(bool update) { updatePointData = update; }
 
   void apply() {
     if (levelSet == nullptr) {
@@ -75,6 +78,19 @@ public:
     typename nodeContainerType::iterator nodeIt;
 
     lsInternal::lsMarchingCubes marchingCubes;
+
+    using DomainType = lsDomain<T, D>;
+    using ScalarDataType = typename DomainType::PointDataType::ScalarDataType;
+    using VectorDataType = typename DomainType::PointDataType::VectorDataType;
+
+    const bool updateData = updatePointData;
+
+    // save how data should be transferred to new level set
+    // list of indices into the old pointData vector
+    std::vector<std::vector<unsigned>> newDataSourceIds;
+    // there is no multithreading here, so just use 1
+    if (updateData)
+      newDataSourceIds.resize(1);
 
     // iterate over all active points
     for (hrleConstSparseCellIterator<hrleDomainType> cellIt(
@@ -128,6 +144,7 @@ public:
 
             // calculate coordinate of new node
             std::array<T, 3> cc{}; // initialise with zeros
+            std::size_t currentPointId = 0;
             for (int z = 0; z < D; z++) {
               if (z != dir) {
                 // TODO might not need BitMaskToVector here, just check if z bit
@@ -142,18 +159,15 @@ public:
 
                 // calculate the surface-grid intersection point
                 if (d0 == -d1) { // includes case where d0=d1=0
-                  // meshNodeToPointIdMapping.push_back(
-                  //     cellIt.getCorner(p0).getPointId());
+                  currentPointId = cellIt.getCorner(p0).getPointId();
                   cc[z] = static_cast<T>(cellIt.getIndices(z)) + 0.5;
                 } else {
                   if (std::abs(d0) <= std::abs(d1)) {
-                    // meshNodeToPointIdMapping.push_back(
-                    //     cellIt.getCorner(p0).getPointId());
+                    currentPointId = cellIt.getCorner(p0).getPointId();
                     cc[z] =
                         static_cast<T>(cellIt.getIndices(z)) + (d0 / (d0 - d1));
                   } else {
-                    // meshNodeToPointIdMapping.push_back(
-                    //     cellIt.getCorner(p1).getPointId());
+                    currentPointId = cellIt.getCorner(p1).getPointId();
                     cc[z] = static_cast<T>(cellIt.getIndices(z) + 1) -
                             (d1 / (d1 - d0));
                   }
@@ -168,11 +182,20 @@ public:
             nod_numbers[n] =
                 mesh->insertNextNode(cc); // insert new surface node
             nodes[dir][d] = nod_numbers[n];
+
+            if (updateData)
+              newDataSourceIds[0].push_back(currentPointId);
           }
         }
 
         mesh->insertNextElement(nod_numbers); // insert new surface element
       }
+    }
+
+    // now copy old data into new level set
+    if (updateData) {
+      mesh->getPointData().translateFromMultiData(levelSet->getPointData(),
+                                                  newDataSourceIds);
     }
   }
 };

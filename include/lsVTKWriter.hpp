@@ -12,6 +12,7 @@
 #include <vtkCellArray.h>
 #include <vtkCellData.h>
 #include <vtkFloatArray.h>
+#include <vtkPointData.h>
 #include <vtkPoints.h>
 #include <vtkPolyData.h>
 #include <vtkSmartPointer.h>
@@ -24,8 +25,40 @@
 /// Class handling the output of an lsMesh<> to VTK file types.
 template <class T> class lsVTKWriter {
   lsSmartPointer<lsMesh<T>> mesh = nullptr;
-  lsFileFormatEnum fileFormat = lsFileFormatEnum::VTK_LEGACY;
+  lsFileFormatEnum fileFormat = lsFileFormatEnum::VTK_AUTO;
   std::string fileName;
+
+#ifdef VIENNALS_USE_VTK
+  template <class In, class Out>
+  void addDataFromMesh(const In &inData, Out outData) const {
+    // now add pointData
+    for (unsigned i = 0; i < inData.getScalarDataSize(); ++i) {
+      vtkSmartPointer<vtkFloatArray> pointData =
+          vtkSmartPointer<vtkFloatArray>::New();
+      pointData->SetNumberOfComponents(1);
+      pointData->SetName(inData.getScalarDataLabel(i).c_str());
+      auto scalars = *(inData.getScalarData(i));
+      for (unsigned j = 0; j < inData.getScalarData(i)->size(); ++j) {
+        pointData->InsertNextValue(scalars[j]);
+      }
+      outData->AddArray(pointData);
+    }
+
+    // now add vector data
+    for (unsigned i = 0; i < inData.getVectorDataSize(); ++i) {
+      vtkSmartPointer<vtkFloatArray> vectorData =
+          vtkSmartPointer<vtkFloatArray>::New();
+      vectorData->SetNumberOfComponents(3);
+      vectorData->SetName(inData.getVectorDataLabel(i).c_str());
+      auto vectors = *(inData.getVectorData(i));
+      for (unsigned j = 0; j < inData.getVectorData(i)->size(); ++j) {
+        vectorData->InsertNextTuple3(vectors[j][0], vectors[j][1],
+                                     vectors[j][2]);
+      }
+      outData->AddArray(vectorData);
+    }
+  }
+#endif // VIENNALS_USE_VTK
 
 public:
   lsVTKWriter() {}
@@ -65,6 +98,23 @@ public:
       return;
     }
 
+    if (fileFormat == lsFileFormatEnum::VTK_AUTO) {
+      auto ending = fileName.substr(fileName.find_last_of('.'));
+      if (ending == ".vtk") {
+        fileFormat = lsFileFormatEnum::VTK_LEGACY;
+      } else if (ending == ".vtp") {
+        fileFormat = lsFileFormatEnum::VTP;
+      } else if (ending == ".vtu") {
+        fileFormat = lsFileFormatEnum::VTU;
+      } else {
+        lsMessage::getInstance()
+            .addWarning("No valid file format found based on the file ending "
+                        "passed to lsVTKWriter. Not writing.")
+            .print();
+        return;
+      }
+    }
+
     // check file format
     switch (fileFormat) {
     case lsFileFormatEnum::VTK_LEGACY:
@@ -82,9 +132,10 @@ public:
     case lsFileFormatEnum::VTU:
       lsMessage::getInstance()
           .addWarning(
-              "lsVTKWriter was built without VTK support. Only VTK_LEGACY "
-              "can be used. File not written.")
+              "lsVTKWriter was built without VTK support. Falling back to VTK_LEGACY.")
           .print();
+      writeVTKLegacy(fileName);
+      break;
 #endif
     default:
       lsMessage::getInstance()
@@ -153,32 +204,8 @@ private:
       polyData->SetPolys(polyCells);
     }
 
-    // now add pointData
-    for (unsigned i = 0; i < mesh->getScalarDataSize(); ++i) {
-      vtkSmartPointer<vtkFloatArray> pointData =
-          vtkSmartPointer<vtkFloatArray>::New();
-      pointData->SetNumberOfComponents(1);
-      pointData->SetName(mesh->getScalarDataLabel(i).c_str());
-      auto scalars = *(mesh->getScalarData(i));
-      for (unsigned j = 0; j < mesh->getScalarData(i)->size(); ++j) {
-        pointData->InsertNextValue(scalars[j]);
-      }
-      polyData->GetCellData()->AddArray(pointData);
-    }
-
-    // now add vector data
-    for (unsigned i = 0; i < mesh->getVectorDataSize(); ++i) {
-      vtkSmartPointer<vtkFloatArray> vectorData =
-          vtkSmartPointer<vtkFloatArray>::New();
-      vectorData->SetNumberOfComponents(3);
-      vectorData->SetName(mesh->getVectorDataLabel(i).c_str());
-      auto vectors = *(mesh->getVectorData(i));
-      for (unsigned j = 0; j < mesh->getVectorData(i)->size(); ++j) {
-        vectorData->InsertNextTuple3(vectors[j][0], vectors[j][1],
-                                     vectors[j][2]);
-      }
-      polyData->GetCellData()->AddArray(vectorData);
-    }
+    addDataFromMesh(mesh->pointData, polyData->GetPointData());
+    addDataFromMesh(mesh->cellData, polyData->GetCellData());
 
     vtkSmartPointer<vtkXMLPolyDataWriter> pwriter =
         vtkSmartPointer<vtkXMLPolyDataWriter>::New();
@@ -273,32 +300,35 @@ private:
     // set cells
     uGrid->SetCells(&(cellTypes[0]), cells);
 
-    // now add pointData
-    for (unsigned i = 0; i < mesh->getScalarDataSize(); ++i) {
-      vtkSmartPointer<vtkFloatArray> pointData =
-          vtkSmartPointer<vtkFloatArray>::New();
-      pointData->SetNumberOfComponents(1);
-      pointData->SetName(mesh->getScalarDataLabel(i).c_str());
-      auto scalars = *(mesh->getScalarData(i));
-      for (unsigned j = 0; j < scalars.size(); ++j) {
-        pointData->InsertNextValue(scalars[j]);
-      }
-      uGrid->GetCellData()->AddArray(pointData);
-    }
+    addDataFromMesh(mesh->pointData, uGrid->GetPointData());
+    addDataFromMesh(mesh->cellData, uGrid->GetCellData());
 
-    // now add vector data
-    for (unsigned i = 0; i < mesh->getVectorDataSize(); ++i) {
-      vtkSmartPointer<vtkFloatArray> vectorData =
-          vtkSmartPointer<vtkFloatArray>::New();
-      vectorData->SetNumberOfComponents(3);
-      vectorData->SetName(mesh->getVectorDataLabel(i).c_str());
-      auto vectors = *(mesh->getVectorData(i));
-      for (unsigned j = 0; j < vectors.size(); ++j) {
-        vectorData->InsertNextTuple3(vectors[j][0], vectors[j][1],
-                                     vectors[j][2]);
-      }
-      uGrid->GetCellData()->AddArray(vectorData);
-    }
+    // // now add pointData
+    // for (unsigned i = 0; i < mesh->cellData.getScalarDataSize(); ++i) {
+    //   vtkSmartPointer<vtkFloatArray> pointData =
+    //       vtkSmartPointer<vtkFloatArray>::New();
+    //   pointData->SetNumberOfComponents(1);
+    //   pointData->SetName(mesh->cellData.getScalarDataLabel(i).c_str());
+    //   auto scalars = *(mesh->cellData.getScalarData(i));
+    //   for (unsigned j = 0; j < scalars.size(); ++j) {
+    //     pointData->InsertNextValue(scalars[j]);
+    //   }
+    //   uGrid->GetCellData()->AddArray(pointData);
+    // }
+
+    // // now add vector data
+    // for (unsigned i = 0; i < mesh->cellData.getVectorDataSize(); ++i) {
+    //   vtkSmartPointer<vtkFloatArray> vectorData =
+    //       vtkSmartPointer<vtkFloatArray>::New();
+    //   vectorData->SetNumberOfComponents(3);
+    //   vectorData->SetName(mesh->cellData.getVectorDataLabel(i).c_str());
+    //   auto vectors = *(mesh->cellData.getVectorData(i));
+    //   for (unsigned j = 0; j < vectors.size(); ++j) {
+    //     vectorData->InsertNextTuple3(vectors[j][0], vectors[j][1],
+    //                                  vectors[j][2]);
+    //   }
+    //   uGrid->GetCellData()->AddArray(vectorData);
+    // }
 
     vtkSmartPointer<vtkXMLUnstructuredGridWriter> owriter =
         vtkSmartPointer<vtkXMLUnstructuredGridWriter>::New();
@@ -390,12 +420,22 @@ private:
     for (unsigned i = 0; i < mesh->hexas.size(); ++i)
       f << 12 << std::endl;
 
+    // WRITE POINT DATA
+    if (mesh->pointData.getScalarDataSize() ||
+        mesh->pointData.getVectorDataSize()) {
+      lsMessage::getInstance()
+          .addWarning("Point data output not supported for legacy VTK output. "
+                      "Point data is ignored.")
+          .print();
+    }
+
     // WRITE SCALAR DATA
-    if (mesh->getScalarDataSize()) {
-      f << "CELL_DATA " << mesh->getScalarData(0)->size() << std::endl;
-      for (unsigned i = 0; i < mesh->getScalarDataSize(); ++i) {
-        auto scalars = *(mesh->getScalarData(i));
-        f << "SCALARS " << mesh->getScalarDataLabel(i) << " float" << std::endl;
+    if (mesh->cellData.getScalarDataSize()) {
+      f << "CELL_DATA " << mesh->cellData.getScalarData(0)->size() << std::endl;
+      for (unsigned i = 0; i < mesh->cellData.getScalarDataSize(); ++i) {
+        auto scalars = *(mesh->cellData.getScalarData(i));
+        f << "SCALARS " << mesh->cellData.getScalarDataLabel(i) << " float"
+          << std::endl;
         f << "LOOKUP_TABLE default" << std::endl;
         for (unsigned j = 0; j < scalars.size(); ++j) {
           f << ((std::abs(scalars[j]) < 1e-6) ? 0.0 : scalars[j]) << std::endl;
@@ -404,12 +444,14 @@ private:
     }
 
     // WRITE VECTOR DATA
-    if (mesh->getVectorDataSize()) {
-      if (!mesh->getScalarDataSize())
-        f << "CELL_DATA " << mesh->getVectorData(0)->size() << std::endl;
-      for (unsigned i = 0; i < mesh->getVectorDataSize(); ++i) {
-        auto vectors = *(mesh->getVectorData(i));
-        f << "VECTORS " << mesh->getVectorDataLabel(i) << " float" << std::endl;
+    if (mesh->cellData.getVectorDataSize()) {
+      if (!mesh->cellData.getScalarDataSize())
+        f << "CELL_DATA " << mesh->cellData.getVectorData(0)->size()
+          << std::endl;
+      for (unsigned i = 0; i < mesh->cellData.getVectorDataSize(); ++i) {
+        auto vectors = *(mesh->cellData.getVectorData(i));
+        f << "VECTORS " << mesh->cellData.getVectorDataLabel(i) << " float"
+          << std::endl;
         for (unsigned j = 0; j < vectors.size(); ++j) {
           for (unsigned k = 0; k < 3; ++k) {
             f << vectors[j][k] << " ";

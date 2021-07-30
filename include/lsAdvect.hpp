@@ -34,6 +34,16 @@
 #include <lsVTKWriter.hpp>
 #endif
 
+namespace lsInternal::advect
+{
+  template <class IntegrationSchemeType, class T, int D,
+            lsConcepts::IsNotSame<IntegrationSchemeType,
+                                  lsInternal::lsStencilLocalLaxFriedrichsScalar<
+                                      T, D, 1>> = lsConcepts::assignable>
+  void reduceTimeStepHamiltonJacobi(IntegrationSchemeType &, double &,
+                                    hrleCoordType) {}
+} // namespace lsInternal::advect
+
 /// Enumeration for the different Integration schemes
 /// used by the advection kernel
 enum struct lsIntegrationSchemeEnum : unsigned
@@ -71,39 +81,12 @@ class lsAdvect
   bool calculateNormalVectors = true;
   bool ignoreVoids = false;
   double advectionTime = 0.;
+  bool performOnlySingleStep = false;
   double advectedTime = 0.;
   unsigned numberOfTimeSteps = 0;
   bool saveAdvectionVelocities = false;
+  bool updatePointData = true;
   static constexpr double wrappingLayerEpsilon = 1e-4;
-
-  template <class IntegrationSchemeType,
-            lsConcepts::IsNotSame<IntegrationSchemeType,
-                                  lsInternal::lsStencilLocalLaxFriedrichsScalar<
-                                      T, D, 1>> = lsConcepts::assignable>
-  void reduceTimeStepHamiltonJacobi(IntegrationSchemeType &, double &) {}
-
-  template <class IntegrationSchemeType,
-            lsConcepts::IsSame<IntegrationSchemeType,
-                               lsInternal::lsStencilLocalLaxFriedrichsScalar<
-                                   T, D, 1>> = lsConcepts::assignable>
-  void reduceTimeStepHamiltonJacobi(IntegrationSchemeType &scheme,
-                                    double &MaxTimeStep)
-  {
-    const double alpha_maxCFL = 1.0;
-    // second time step test, based on alphas
-    hrleVectorType<T, 3> alphas = scheme.getFinalAlphas();
-
-    auto gridDelta = levelSets.back()->getGrid().getGridDelta();
-
-    double timeStep = 0;
-    for (int i = 0; i < D; ++i)
-    {
-      timeStep += alphas[i] / gridDelta;
-    }
-
-    timeStep = alpha_maxCFL / timeStep;
-    MaxTimeStep = std::min(timeStep, MaxTimeStep);
-  }
 
   void rebuildLS()
   {
@@ -120,10 +103,12 @@ class lsAdvect
                          domain.getAllocation() *
                              (2.0 / levelSets.back()->getLevelSetWidth()));
 
+    const bool updateData = updatePointData;
     // save how data should be transferred to new level set
     // list of indices into the old pointData vector
     std::vector<std::vector<unsigned>> newDataSourceIds;
-    newDataSourceIds.resize(newDomain.getNumberOfSegments());
+    if (updateData)
+      newDataSourceIds.resize(newDomain.getNumberOfSegments());
 
 #ifdef DEBUG_LS_ADVECT_HPP
     {
@@ -153,7 +138,8 @@ class lsAdvect
 
       // reserve a bit more to avoid reallocation
       // would expect number of points to roughly double
-      newDataSourceIds[p].reserve(2.5 * domainSegment.getNumberOfPoints());
+      if (updateData)
+        newDataSourceIds[p].reserve(2.5 * domainSegment.getNumberOfPoints());
 
       for (hrleSparseStarIterator<typename lsDomain<T, D>::DomainType> it(
                domain, startVector);
@@ -187,13 +173,15 @@ class lsAdvect
               {
                 domainSegment.insertNextDefinedPoint(
                     it.getIndices(), it.getCenter().getDefinedValue());
-                newDataSourceIds[p].push_back(it.getCenter().getPointId());
+                if (updateData)
+                  newDataSourceIds[p].push_back(it.getCenter().getPointId());
                 // if there is at least one active grid point, which is < -0.5
               }
               else
               {
                 domainSegment.insertNextDefinedPoint(it.getIndices(), 0.5);
-                newDataSourceIds[p].push_back(it.getNeighbor(j).getPointId());
+                if (updateData)
+                  newDataSourceIds[p].push_back(it.getNeighbor(j).getPointId());
               }
             }
             else if (it.getCenter().getDefinedValue() < -0.5)
@@ -210,20 +198,23 @@ class lsAdvect
               {
                 domainSegment.insertNextDefinedPoint(
                     it.getIndices(), it.getCenter().getDefinedValue());
-                newDataSourceIds[p].push_back(it.getCenter().getPointId());
+                if (updateData)
+                  newDataSourceIds[p].push_back(it.getCenter().getPointId());
                 // if there is at least one active grid point, which is > 0.5
               }
               else
               {
                 domainSegment.insertNextDefinedPoint(it.getIndices(), -0.5);
-                newDataSourceIds[p].push_back(it.getNeighbor(j).getPointId());
+                if (updateData)
+                  newDataSourceIds[p].push_back(it.getNeighbor(j).getPointId());
               }
             }
             else
             {
               domainSegment.insertNextDefinedPoint(
                   it.getIndices(), it.getCenter().getDefinedValue());
-              newDataSourceIds[p].push_back(it.getCenter().getPointId());
+              if (updateData)
+                newDataSourceIds[p].push_back(it.getCenter().getPointId());
             }
           }
           else
@@ -256,8 +247,9 @@ class lsAdvect
             if (distance <= 1.)
             {
               domainSegment.insertNextDefinedPoint(it.getIndices(), distance);
-              newDataSourceIds[p].push_back(
-                  it.getNeighbor(usedNeighbor).getPointId());
+              if (updateData)
+                newDataSourceIds[p].push_back(
+                    it.getNeighbor(usedNeighbor).getPointId());
             }
             else
             {
@@ -286,8 +278,9 @@ class lsAdvect
             if (distance >= -1.)
             {
               domainSegment.insertNextDefinedPoint(it.getIndices(), distance);
-              newDataSourceIds[p].push_back(
-                  it.getNeighbor(usedNeighbor).getPointId());
+              if (updateData)
+                newDataSourceIds[p].push_back(
+                    it.getNeighbor(usedNeighbor).getPointId());
             }
             else
             {
@@ -300,55 +293,11 @@ class lsAdvect
     }
 
     // now copy old data into new level set
-    auto &pointData = levelSets.back()->getPointData();
-    if (!pointData.getScalarDataSize() || !pointData.getVectorDataSize())
+    if (updateData)
     {
-      auto &newPointData = newlsDomain->getPointData();
-      // concatenate all source ids into one vector
-      newDataSourceIds.reserve(newlsDomain->getNumberOfPoints());
-      for (unsigned i = 1; i < newDataSourceIds.size(); ++i)
-      {
-        for (unsigned j = 0; j < newDataSourceIds[i].size(); ++j)
-        {
-          newDataSourceIds[0].push_back(newDataSourceIds[i][j]);
-        }
-        // free memory of copied vectors
-        std::vector<unsigned>().swap(newDataSourceIds[i]);
-      }
-
-      // scalars
-      for (unsigned scalarId = 0; scalarId < pointData.getScalarDataSize();
-           ++scalarId)
-      {
-        newPointData.insertNextScalarData(
-            typename lsPointData<T>::ScalarDataType(),
-            pointData.getScalarDataLabel(scalarId));
-        auto &newScalars = *(newPointData.getScalarData(scalarId));
-        auto &scalars = *(pointData.getScalarData(scalarId));
-        newScalars.reserve(newlsDomain->getNumberOfPoints());
-
-        for (unsigned i = 0; i < newDataSourceIds[0].size(); ++i)
-        {
-          newScalars.push_back(scalars[newDataSourceIds[0][i]]);
-        }
-      }
-
-      // vectors
-      for (unsigned vectorId = 0; vectorId < pointData.getVectorDataSize();
-           ++vectorId)
-      {
-        newPointData.insertNextVectorData(
-            typename lsPointData<T>::VectorDataType(),
-            pointData.getVectorDataLabel(vectorId));
-        auto &newVectors = *(newPointData.getVectorData(vectorId));
-        auto &vectors = *(pointData.getVectorData(vectorId));
-        newVectors.reserve(newlsDomain->getNumberOfPoints());
-
-        for (unsigned i = 0; i < newDataSourceIds[0].size(); ++i)
-        {
-          newVectors.push_back(vectors[newDataSourceIds[0][i]]);
-        }
-      }
+      auto &pointData = levelSets.back()->getPointData();
+      newlsDomain->getPointData().translateFromMultiData(pointData,
+                                                         newDataSourceIds);
     }
 
     newDomain.finalize();
@@ -376,9 +325,6 @@ class lsAdvect
           .print();
       return std::numeric_limits<double>::max();
     }
-
-    // clear all metadata as it will be invalidated
-    levelSets.back()->clearMetaData();
 
     double currentTime = 0.;
     if (integrationScheme ==
@@ -524,10 +470,24 @@ class lsAdvect
     std::vector<std::vector<std::pair<T, T>>> totalTempRates;
     totalTempRates.resize((levelSets.back())->getNumberOfSegments());
 
+    typename lsPointData<T>::ScalarDataType *voidMarkerPointer;
     if (ignoreVoids)
     {
       lsMarkVoidPoints<T, D>(levelSets.back()).apply();
+      auto &pointData = levelSets.back()->getPointData();
+      voidMarkerPointer =
+          pointData.getScalarData(lsMarkVoidPoints<T, D>::voidPointLabel);
+      if (voidMarkerPointer == nullptr)
+      {
+        lsMessage::getInstance()
+            .addWarning("lsAdvect: Cannot find void point markers. Not "
+                        "ignoring void points.")
+            .print();
+        ignoreVoids = false;
+      }
     }
+
+    const bool ignoreVoidPoints = ignoreVoids;
 
 #pragma omp parallel num_threads((levelSets.back())->getNumberOfSegments())
     {
@@ -562,8 +522,6 @@ class lsAdvect
       }
 
       IntegrationSchemeType scheme(IntegrationScheme);
-      auto &voidPoints =
-          *(levelSets.back()->getPointData().getScalarData("VoidPointMarkers"));
 
       for (hrleSparseIterator<typename lsDomain<T, D>::DomainType> it(
                topDomain, startVector);
@@ -583,7 +541,7 @@ class lsAdvect
 
           T velocity = 0;
 
-          if (!(ignoreVoids && voidPoints[it.getPointId()]))
+          if (!(ignoreVoidPoints && (*voidMarkerPointer)[it.getPointId()]))
           {
             // check if there is any other levelset at the same point:
             // if yes, take the velocity of the lowest levelset
@@ -670,7 +628,10 @@ class lsAdvect
         // If scheme is STENCIL_LOCAL_LAX_FRIEDRICHS the time step is reduced
         // depending on the dissipation coefficients For all remaining schemes
         // this function is empty.
-        reduceTimeStepHamiltonJacobi(scheme, tempMaxTimeStep);
+        lsInternal::advect::reduceTimeStepHamiltonJacobi<IntegrationSchemeType,
+                                                         T, D>(
+            scheme, tempMaxTimeStep,
+            levelSets.back()->getGrid().getGridDelta());
 
         // set global timestep maximum
         if (tempMaxTimeStep < maxTimeStep)
@@ -740,21 +701,30 @@ class lsAdvect
 
     if (saveVelocities)
     {
-      typename lsPointData<T>::ScalarDataType pointData;
+      auto &pointData = levelSets.back()->getPointData();
+      // delete if already exists
+      if (int i = pointData.getScalarDataIndex(velocityLabel); i != -1)
+      {
+        pointData.eraseScalarData(i);
+      }
+
+      typename lsPointData<T>::ScalarDataType vels;
+
       for (unsigned i = 0; i < velocityVectors.size(); ++i)
       {
-        pointData.insert(pointData.end(),
-                         std::make_move_iterator(velocityVectors[i].begin()),
-                         std::make_move_iterator(velocityVectors[i].end()));
+        vels.insert(vels.end(),
+                    std::make_move_iterator(velocityVectors[i].begin()),
+                    std::make_move_iterator(velocityVectors[i].end()));
       }
-      levelSets.back()->getPointData().insertNextScalarData(
-          pointData, "AdvectionVelocity");
+      pointData.insertNextScalarData(std::move(vels), velocityLabel);
     }
 
     return maxTimeStep;
   }
 
 public:
+  static constexpr char velocityLabel[] = "AdvectionVelocities";
+
   lsAdvect() {}
 
   lsAdvect(lsSmartPointer<lsDomain<T, D>> passedlsDomain)
@@ -816,6 +786,12 @@ public:
   /// CFL condition(see setTimeStepRatio) will be performed.
   void setAdvectionTime(double time) { advectionTime = time; }
 
+  /// If set to true, only a single advection step will be
+  /// performed, even if the advection time set with
+  /// setAdvectionTime(double) would require several steps to pass.
+  /// Defaults to false.
+  void setSingleStep(bool singleStep) { performOnlySingleStep = singleStep; }
+
   /// Set the CFL condition to use during advection.
   /// The CFL condition sets the maximum distance a surface can
   /// be moved during one advection step. It MUST be below 0.5
@@ -866,6 +842,10 @@ public:
   /// scaling factor for the calculated alpha values.
   void setDissipationAlpha(const double &a) { dissipationAlpha = a; }
 
+  /// Set whether the point data in the old LS should
+  /// be translated to the advected LS. Defaults to true.
+  void setUpdatePointData(bool update) { updatePointData = update; }
+
   /// Perform the advection.
   void apply()
   {
@@ -882,6 +862,8 @@ public:
       {
         currentTime += advect(advectionTime - currentTime);
         ++numberOfTimeSteps;
+        if (performOnlySingleStep)
+          break;
       }
       advectedTime = currentTime;
     }
