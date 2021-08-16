@@ -163,6 +163,14 @@ if(VIENNALS_BUILD_TESTS)
   add_subdirectory(Tests)
 endif(VIENNALS_BUILD_TESTS)
 
+#################################################
+# BUILD BENCHMARKS (Small examples for benchmarking)
+#################################################
+option(VIENNALS_BUILD_BENCHMARKS "Build benchmarks." OFF)
+if(VIENNALS_BUILD_BENCHMARKS)
+  add_subdirectory(Benchmarks)
+  message(STATUS "Building benchmarks: ${BENCHMARK_DIRS}")
+endif(VIENNALS_BUILD_BENCHMARKS)
 
 #################################################
 # BUILD PYTHON MODULE

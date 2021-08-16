@@ -15,8 +15,7 @@
 */
 
 // implement own velocity field
-class velocityField : public lsVelocityField<double>
-{
+class velocityField : public lsVelocityField<double> {
   std::vector<double> &data_;
 
 public:
@@ -25,8 +24,7 @@ public:
   double getScalarVelocity(const std::array<double, 3> & /*coordinate*/,
                            int /*material*/,
                            const std::array<double, 3> & /*normalVector*/,
-                           unsigned long pointId)
-  {
+                           unsigned long pointId) {
     // Some arbitrary velocity function of your liking
     // (try changing it and see what happens :)
     // double velocity = 1. + ((normalVector[0] > 0) ? 2.3 : 0.5) *
@@ -39,21 +37,18 @@ public:
   getVectorVelocity(const std::array<double, 3> & /*coordinate*/,
                     int /*material*/,
                     const std::array<double, 3> & /*normalVector*/,
-                    unsigned long /*pointId*/)
-  {
+                    unsigned long /*pointId*/) {
     return std::array<double, 3>({});
   }
 
   double
   getDissipationAlpha(int /*direction*/, int /*material*/,
-                      const std::array<double, 3> & /*centralDifferences*/)
-  {
+                      const std::array<double, 3> & /*centralDifferences*/) {
     return 0;
   }
 };
 
-int main()
-{
+int main() {
 
   constexpr int D = 3;
   omp_set_num_threads(1);
@@ -84,8 +79,7 @@ int main()
 
   const unsigned numberOfSteps = 500;
   // run several adveciton steps with different number of threads
-  for (unsigned cores = 1; cores < 33; cores *= 2)
-  {
+  for (unsigned cores = 1; cores < 33; cores *= 2) {
     omp_set_num_threads(cores);
 
     auto levelSet = lsSmartPointer<lsDomain<double, D>>::New(gridDelta);
@@ -98,13 +92,14 @@ int main()
     advectionKernel.setVelocityField(velocities);
 
     const auto start = std::chrono::high_resolution_clock::now();
-    for (unsigned i = 0; i < numberOfSteps; ++i)
-    {
+    for (unsigned i = 0; i < numberOfSteps; ++i) {
       advectionKernel.apply();
     }
     const auto stop = std::chrono::high_resolution_clock::now();
     std::cout << "Advection with " << cores << ": "
-              << std::chrono::duration_cast<std::chrono::milliseconds>(stop - start).count()
+              << std::chrono::duration_cast<std::chrono::milliseconds>(stop -
+                                                                       start)
+                     .count()
               << "\n";
 
     auto mesh = lsSmartPointer<lsMesh<>>::New();

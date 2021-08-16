@@ -7,9 +7,7 @@
 /// Base class for distributions used by lsGeometricAdvect.
 /// All functions are pure virtual and must be implemented
 /// by any advection distribution.
-template <class T, int D>
-class lsGeometricAdvectDistribution
-{
+template <class T, int D> class lsGeometricAdvectDistribution {
 public:
   lsGeometricAdvectDistribution() {}
 
@@ -19,8 +17,7 @@ public:
   /// return true or do not overload this function.
   virtual bool isInside(const std::array<hrleCoordType, 3> &initial,
                         const std::array<hrleCoordType, 3> &candidate,
-                        double eps = 0.) const
-  {
+                        double eps = 0.) const {
     return true;
   }
 
@@ -40,8 +37,7 @@ public:
 /// Concrete implementation of lsGeometricAdvectDistribution for a spherical
 /// advection distribution.
 template <class T, int D>
-class lsSphereDistribution : public lsGeometricAdvectDistribution<T, D>
-{
+class lsSphereDistribution : public lsGeometricAdvectDistribution<T, D> {
 public:
   const T radius = 0.;
   const T radius2;
@@ -52,11 +48,9 @@ public:
 
   bool isInside(const std::array<hrleCoordType, 3> &initial,
                 const std::array<hrleCoordType, 3> &candidate,
-                double eps = 0.) const
-  {
+                double eps = 0.) const {
     hrleCoordType dot = 0.;
-    for (unsigned i = 0; i < D; ++i)
-    {
+    for (unsigned i = 0; i < D; ++i) {
       double tmp = candidate[i] - initial[i];
       dot += tmp * tmp;
     }
@@ -68,25 +62,19 @@ public:
   }
 
   T getSignedDistance(const std::array<hrleCoordType, 3> &initial,
-                      const std::array<hrleCoordType, 3> &candidate) const
-  {
+                      const std::array<hrleCoordType, 3> &candidate) const {
     T distance = std::numeric_limits<T>::max();
     std::array<hrleCoordType, D> v;
-    for (unsigned i = 0; i < D; ++i)
-    {
+    for (unsigned i = 0; i < D; ++i) {
       v[i] = candidate[i] - initial[i];
     }
 
-    if (std::abs(radius) <= gridDelta)
-    {
+    if (std::abs(radius) <= gridDelta) {
       distance =
           std::max(std::max(std::abs(v[0]), std::abs(v[1])), std::abs(v[2])) -
           std::abs(radius);
-    }
-    else
-    {
-      for (unsigned i = 0; i < D; ++i)
-      {
+    } else {
+      for (unsigned i = 0; i < D; ++i) {
         T y = (v[(i + 1) % D]);
         T z = 0;
         if (D == 3)
@@ -100,21 +88,16 @@ public:
       }
     }
     // return distance;
-    if (radius < 0)
-    {
+    if (radius < 0) {
       return -distance;
-    }
-    else
-    {
+    } else {
       return distance;
     }
   }
 
-  std::array<hrleCoordType, 6> getBounds() const
-  {
+  std::array<hrleCoordType, 6> getBounds() const {
     std::array<hrleCoordType, 6> bounds = {};
-    for (unsigned i = 0; i < D; ++i)
-    {
+    for (unsigned i = 0; i < D; ++i) {
       bounds[2 * i] = -radius;
       bounds[2 * i + 1] = radius;
     }
@@ -125,19 +108,15 @@ public:
 /// Concrete implementation of lsGeometricAdvectDistribution
 /// for a rectangular box distribution.
 template <class T, int D>
-class lsBoxDistribution : public lsGeometricAdvectDistribution<T, D>
-{
+class lsBoxDistribution : public lsGeometricAdvectDistribution<T, D> {
 public:
   const hrleVectorType<T, 3> posExtent;
   const T gridDelta;
 
   lsBoxDistribution(const std::array<T, 3> &halfAxes, const T delta)
-      : posExtent(halfAxes), gridDelta(delta)
-  {
-    for (unsigned i = 0; i < D; ++i)
-    {
-      if (std::abs(posExtent[i]) < gridDelta)
-      {
+      : posExtent(halfAxes), gridDelta(delta) {
+    for (unsigned i = 0; i < D; ++i) {
+      if (std::abs(posExtent[i]) < gridDelta) {
         lsMessage::getInstance()
             .addWarning("One half-axis of lsBoxDistribution is smaller than "
                         "the grid Delta! This can lead to numerical errors "
@@ -149,13 +128,10 @@ public:
 
   bool isInside(const std::array<hrleCoordType, 3> &initial,
                 const std::array<hrleCoordType, 3> &candidate,
-                double eps = 0.) const
-  {
-    for (unsigned i = 0; i < D; ++i)
-    {
+                double eps = 0.) const {
+    for (unsigned i = 0; i < D; ++i) {
       if (std::abs(candidate[i] - initial[i]) >
-          (std::abs(posExtent[i]) + eps))
-      {
+          (std::abs(posExtent[i]) + eps)) {
         return false;
       }
     }
@@ -163,22 +139,18 @@ public:
   }
 
   T getSignedDistance(const std::array<hrleCoordType, 3> &initial,
-                      const std::array<hrleCoordType, 3> &candidate) const
-  {
+                      const std::array<hrleCoordType, 3> &candidate) const {
     T distance = std::numeric_limits<T>::lowest();
-    for (unsigned i = 0; i < D; ++i)
-    {
+    for (unsigned i = 0; i < D; ++i) {
       T vector = std::abs(candidate[i] - initial[i]);
       distance = std::max(vector - std::abs(posExtent[i]), distance);
     }
     return (posExtent[0] < 0) ? -distance : distance;
   }
 
-  std::array<hrleCoordType, 6> getBounds() const
-  {
+  std::array<hrleCoordType, 6> getBounds() const {
     std::array<hrleCoordType, 6> bounds = {};
-    for (unsigned i = 0; i < D; ++i)
-    {
+    for (unsigned i = 0; i < D; ++i) {
       bounds[2 * i] = -posExtent[i];
       bounds[2 * i + 1] = posExtent[i];
     }

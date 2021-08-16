@@ -5,7 +5,6 @@
 // ViennaHRLE
 // ViennaLS
 #include <lsTestAsserts.hpp>
-//#define LS_TREE
 #include <lsDimension.hpp>
 #include <lsTest.hpp>
 #include <lsVTKWriter.hpp>
@@ -14,7 +13,7 @@ template <int D = 3>
 lsTestStatus testDimension(void)
 {
 
-  using Dim = Dimension<D>;
+  using Dim = typename lsInternal::Dimension<D>;
   std::vector<uint> shouldBe;
 
   // test forward iteration
@@ -63,13 +62,17 @@ lsTestStatus testDimension(void)
   Dim dim3 = initDim; // y
 
   uint shouldBeThis = 1; // minus 1 included
-  std::cout << "implicit to uint: " << dim3 << " == " << shouldBeThis << std::endl;
+  std::cout << "implicit to uint: " << dim3 << " == " << shouldBeThis
+            << std::endl;
   LSTEST_ASSERT(dim3 == shouldBeThis)
-  std::cout << "explicit to uint: " << dim3 << " == " << shouldBeThis << std::endl;
+  std::cout << "explicit to uint: " << dim3 << " == " << shouldBeThis
+            << std::endl;
   LSTEST_ASSERT(uint(dim3) == shouldBeThis)
-  std::cout << "explicit to int: " << dim3 << " == " << shouldBeThis << std::endl;
+  std::cout << "explicit to int: " << dim3 << " == " << shouldBeThis
+            << std::endl;
   LSTEST_ASSERT(int(dim3) == shouldBeThis)
-  std::cout << "explicit to size_t: " << dim3 << " == " << shouldBeThis << std::endl;
+  std::cout << "explicit to size_t: " << dim3 << " == " << shouldBeThis
+            << std::endl;
   LSTEST_ASSERT(size_t(dim3) == shouldBeThis)
 
   return lsTestStatus::SUCCESS;

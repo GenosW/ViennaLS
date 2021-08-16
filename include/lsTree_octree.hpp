@@ -1,24 +1,26 @@
 //#define LS_TREE
 #ifndef LS_TREE
 #define LS_TREE
-#include <vector>
 #include <lsToDiskMesh.hpp>
 #include <math.h>
+#include <vector>
 
 // (x > 0) : (x < 0) -> Close : Far
 // (y > 0) : (y < 0) -> Right : Left
 // (z > 0) : (z < 0) -> Top : Bottom
 // The direction/Reihenfolge of these numbers might need tweaking!
-#define CRT 0    // close right top <--> (x>0) && (y>0) && (z>0)
-#define FRT 1    // far right top   <--> (x<0) && (y>0) && (z>0)
-#define FLT 2    // far left top    <--> (x<0) && (y<0) && (z>0)
-#define CLT 3    // close left top  <--> (x>0) && (y<0) && (z>0)
-#define CRB 4    // close right bot <--> (x>0) && (y>0) && (z<0)
-#define FRB 5    // far right bot   <--> (x<0) && (y>0) && (z<0)
-#define FLB 6    // far left bot    <--> (x<0) && (y<0) && (z<0)
-#define CLB 7    // close left bot  <--> (x>0) && (y<0) && (z<0)
+#define CRT 0 // close right top <--> (x>0) && (y>0) && (z>0)
+#define FRT 1 // far right top   <--> (x<0) && (y>0) && (z>0)
+#define FLT 2 // far left top    <--> (x<0) && (y<0) && (z>0)
+#define CLT 3 // close left top  <--> (x>0) && (y<0) && (z>0)
+#define CRB 4 // close right bot <--> (x>0) && (y>0) && (z<0)
+#define FRB 5 // far right bot   <--> (x<0) && (y>0) && (z<0)
+#define FLB 6 // far left bot    <--> (x<0) && (y<0) && (z<0)
+#define CLB 7 // close left bot  <--> (x>0) && (y<0) && (z<0)
 
-inline int ipower(int N, int exp) {return (exp>1) ? N*ipower(N, exp-1) : N;};
+inline int ipower(int N, int exp) {
+  return (exp > 1) ? N * ipower(N, exp - 1) : N;
+};
 
 // template <int Dim=3> struct domain {
 //   std::vector<int> data;
@@ -41,7 +43,7 @@ inline int ipower(int N, int exp) {return (exp>1) ? N*ipower(N, exp-1) : N;};
 ///   - D=2... Quadtree
 ///   - D=3... Octree
 /// Maximum depth is 4?
-template <class T, int D> class lsTree { 
+template <class T, int D> class lsTree {
   lsSmartPointer<lsToDiskMesh> mesh = nullptr;
   lsSmartPointer<lsDomain<T, D>> domain = nullptr;
 
@@ -49,7 +51,7 @@ template <class T, int D> class lsTree {
   // TODO: Validate the maxDepth setting. Too deep/too shallow/just right?
   int maxDepth = 4;
   // TODO: Rectangular grid???
-  
+
   int pointsPerDim = 20;
   // TODO: (BR) Reduce number of parameters to minimum needed.
   // They are here to have something to look at and have default values.
@@ -61,23 +63,18 @@ template <class T, int D> class lsTree {
 
   // lsTree node
   struct Node {
-    // 
-    //coords boundary;
+    //
+    // coords boundary;
     // Children
     // Vector of trees for scalability
     // Access via integer index or DEFINES above
     std::vector<lsSmartPointer<lsPointData>> points; // length = numChildren
-    std::vector<lsSmartPointer<Node>> children; // length = numChildren
+    std::vector<lsSmartPointer<Node>> children;      // length = numChildren
     bool hasChildren;
 
-    void split() {
-      hasChildren = true:
-      children.assign(numChildren);
-    }
+    void split() { hasChildren = true : children.assign(numChildren); }
 
-    void makeLeaf() {
-      hasChildren = false;
-    }
+    void makeLeaf() { hasChildren = false; }
 
     void storePoint() {
       // Add to points
@@ -87,8 +84,7 @@ template <class T, int D> class lsTree {
       // Check if Node contains the point based on boundary
       return false;
     }
-  }
-  Node* root; // TODO: (BR) Convert to proper pointer
+  } Node *root; // TODO: (BR) Convert to proper pointer
 
   // Methods
   // void build() {}
@@ -101,20 +97,19 @@ public:
   lsTree() {}
 
   lsTree(lsSmartPointer<lsDomain<T, D>> passedDomain,
-               lsSmartPointer<lsToDiskMesh> passedMesh)
-      : domain(passedDomain), mesh(passedMesh) {
-      }
+         lsSmartPointer<lsToDiskMesh> passedMesh)
+      : domain(passedDomain), mesh(passedMesh) {}
 
   //~lsTree() {}
 
   /// static build --> no need to restructure since grid doesn't change?
   void build() {
-    
+
     // TODO: Implement build
 
     // 1. Check how many points the current node represents
     // 2. If too large, split into quadrants
-    // 2. 
+    // 2.
   }
 
   bool insert(lsPointData point) {
@@ -122,20 +117,17 @@ public:
   }
 
   /*
-  * ---- DEBUG FUNCTIONS ---- *
-  */
-  const char* getTreeType() {
-    return (D == 2) ? "Quadtree" : "Octree";
-  }
+   * ---- DEBUG FUNCTIONS ---- *
+   */
+  const char *getTreeType() { return (D == 2) ? "Quadtree" : "Octree"; }
 
-  void printInfo(){
-      std::cout << getTreeType() << std::endl;
-      std::cout << "binSize: " << binSize << std::endl;
-      std::cout << "numChildren: " << numChildren << std::endl;
-      std::cout << "minSizePerDirection: " << minSizePerDirection << std::endl;
-      std::cout << "minSizeGrid: " << minSizeGrid << std::endl << std::endl;
+  void printInfo() {
+    std::cout << getTreeType() << std::endl;
+    std::cout << "binSize: " << binSize << std::endl;
+    std::cout << "numChildren: " << numChildren << std::endl;
+    std::cout << "minSizePerDirection: " << minSizePerDirection << std::endl;
+    std::cout << "minSizeGrid: " << minSizeGrid << std::endl << std::endl;
   };
-
 };
 
 #endif // LS_TREE
