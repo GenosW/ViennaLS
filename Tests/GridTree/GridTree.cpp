@@ -15,7 +15,7 @@
 #include <lsVTKWriter.hpp>
 
 template <int D>
-void checkTree(lsTree<double, D> treeToCheck, size_t N)
+uint checkTree(lsTree<double, D> treeToCheck, size_t N)
 {
   auto numLevels = treeToCheck.getDepth();
   using Dim = typename lsInternal::Dimension<D>;
@@ -45,16 +45,17 @@ void checkTree(lsTree<double, D> treeToCheck, size_t N)
   LSTEST_ASSERT(std::all_of(ptsInTree.cbegin(), ptsInTree.cend(),
                             [N](auto item)
                             { return item == N; }));
+  return 1;
 };
 
 template <int D>
-lsTestStatus testTree(void)
+uint testTree(void)
 {
   // constexpr int D = Dim;
   std::cout << "D: " << D << std::endl;
   const std::string prefix = "meshes/sphere/" + std::to_string(D) + "D";
 
-  setup_omp(4);
+  lsInternal::setup_omp(4);
 
   // Setup reference geometry
   auto levelSet = lsSmartPointer<lsDomain<double, D>>::New();
@@ -104,16 +105,16 @@ lsTestStatus testTree(void)
   checkTree(tree2, N2);
 
   // PASS!
-  return lsTestStatus::SUCCESS;
+  return 1;
 };
 
 template <int D>
-lsTestStatus testTreeWithBox(void)
+uint testTreeWithBox(void)
 {
   std::cout << "D: " << D << std::endl;
   const std::string prefix = "meshes/box/" + std::to_string(D) + "D";
 
-  setup_omp(4);
+  lsInternal::setup_omp(4);
 
   // Setup reference geometry
   auto levelSet = lsSmartPointer<lsDomain<double, D>>::New();
@@ -174,31 +175,29 @@ lsTestStatus testTreeWithBox(void)
   // std::cout << *treeIt;
 
   // PASS!
-  return lsTestStatus::SUCCESS;
+  return 1;
 };
 
 int main(int argc, char **argv)
 {
-  lsTest test_2d_sphere = INIT_LSTEST(test_2d_sphere);
-  MAKE_LSTEST(test_3d_sphere);
-  MAKE_LSTEST(test_2d_box);
-  MAKE_LSTEST(test_3d_box);
+  uint test_2d_sphere = 0;
+  uint test_3d_sphere = 0;
+  uint test_2d_box = 0;
+  uint test_3d_box = 0;
 
   std::cout << "############### SPHERE ##############" << std::endl;
-  test_2d_sphere.run(testTree<2>);
+  test_2d_sphere = testTree<2>();
   std::cout << "------------- NEXT TEST -------------" << std::endl;
-  test_3d_sphere.run(testTree<3>);
+  test_3d_sphere = testTree<3>();
   std::cout << "################ BOX ################" << std::endl;
-  test_2d_box.run(testTreeWithBox<2>);
+  test_2d_box = testTreeWithBox<2>();
   std::cout << "------------- NEXT TEST -------------" << std::endl;
-  test_3d_box.run(testTreeWithBox<3>);
+  test_3d_box = testTreeWithBox<3>();
 
   std::cout << "------------- RESUMÉ -------------" << std::endl;
 
-  check(test_2d_sphere, test_3d_sphere, test_2d_box, test_3d_box);
-
-  if (all(test_2d_sphere.wasSuccess(), test_3d_sphere.wasSuccess(),
-          test_2d_box.wasSuccess(), test_3d_box.wasSuccess()))
+  if (lsInternal::all(test_2d_sphere, test_3d_sphere,
+                      test_2d_box, test_3d_box))
     std::cout << "Test " << argv[0] << ": SUCCESS!";
   else
     std::cout << "Test " << argv[0] << ": FAILURE!";

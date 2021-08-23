@@ -10,7 +10,7 @@
 #include <lsVTKWriter.hpp>
 
 template <int D = 3>
-lsTestStatus testDimension(void)
+uint testDimension(void)
 {
 
   using Dim = typename lsInternal::Dimension<D>;
@@ -58,7 +58,7 @@ lsTestStatus testDimension(void)
 
   uint initDim = 2;
   std::cout << "type Conversions" << std::endl;
-  std::cout << "Assign from uint" << std::endl;
+  std::cout << "Assign from uint (expected: y == 1)" << std::endl;
   Dim dim3 = initDim; // y
 
   uint shouldBeThis = 1; // minus 1 included
@@ -75,22 +75,19 @@ lsTestStatus testDimension(void)
             << std::endl;
   LSTEST_ASSERT(size_t(dim3) == shouldBeThis)
 
-  return lsTestStatus::SUCCESS;
+  return 1;
 };
 
 int main(int argc, char **argv)
 {
-  lsTest test_2d = INIT_LSTEST(test_2d);
-  MAKE_LSTEST(test_3d);
+  uint test_2d, test_3d;
 
-  test_2d.run(testDimension<2>);
-  test_3d.run(testDimension<3>);
+  test_2d = testDimension<2>();
+  test_3d = testDimension<3>();
 
   std::cout << "------------- RESUMÉ -------------" << std::endl;
 
-  check(test_2d, test_3d);
-
-  if (all(test_2d.wasSuccess(), test_3d.wasSuccess()))
+  if (lsInternal::all(test_2d, test_3d))
     std::cout << "Test " << argv[0] << ": SUCCESS!";
   else
     std::cout << "Test " << argv[0] << ": FAILURE!";

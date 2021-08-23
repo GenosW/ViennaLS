@@ -3,36 +3,35 @@
 #define LS_TREE
 #include <algorithm>
 //#include<cstdint>
-#include <iterator>
+//#include <iterator>
 #include <lsDimension.hpp>
 #include <lsSmartPointer.hpp>
 #include <lsToDiskMesh.hpp>
-#include <utility>
+//#include <utility>
 #include <vector>
 
 #define REORDER
 
-#pragma region helpers
-
-constexpr int64_t ipow(int64_t base, int exp, int64_t result = 1)
+namespace lsInternal
 {
-  return exp < 1
-             ? result
-             : ipow(base * base, exp / 2, (exp % 2) ? result * base : result);
-}
+  constexpr int64_t ipow(int64_t base, int exp, int64_t result = 1)
+  {
+    return exp < 1
+               ? result
+               : ipow(base * base, exp / 2, (exp % 2) ? result * base : result);
+  }
 
-// all depth values are known at compile time
-constexpr int64_t pow2(int exp) { return 1 << exp; }
+  // all depth values are known at compile time
+  constexpr int64_t pow2(int exp) { return 1 << exp; }
 
-constexpr int64_t divByPow2(int num, int exp) { return num >> exp; }
+  constexpr int64_t divByPow2(int num, int exp) { return num >> exp; }
 
-template <int D>
-size_t inline convertToIndex(lsInternal::Dimension<D> dim)
-{
-  return dim.toArrayIndex();
-}
-
-#pragma endregion
+  template <int D>
+  size_t inline convertToIndex(lsInternal::Dimension<D> dim)
+  {
+    return dim.toArrayIndex();
+  }
+} // end namespace lsInternal
 
 /// Tree structure that seperates a domain
 ///
@@ -143,7 +142,7 @@ private:
   std::string tree_type = "kd-Tree";
   // TODO: Validate the maxDepth setting. Too deep/too shallow/just right?
   uint maxDepth = 4;
-  uint maxNumBins = pow2(maxDepth);
+  uint maxNumBins = lsInternal::pow2(maxDepth);
   uint maxPointsPerBin = 4;
   uint depth = 0;
   uint numBins = 1; // numBins = 2^depth
@@ -313,7 +312,7 @@ public:
       --temp.pos;
       return temp;
     }
-  };
+  }; // end class treeIterator
 
   /// const_iterator version of the (tree)Iterator
   template <class VT = point_type>
@@ -326,14 +325,12 @@ public:
     /// Construct from non-const iterator
     constTreeIterator(const treeIterator<VT> &nonconst_other)
         : treeIterator<VT>(nonconst_other){};
-  };
+  }; // end class constTreeIterator
 
   using iterator = treeIterator<point_type>;
   using const_iterator = constTreeIterator<point_type>;
   using range_vector = typename iterator::range_vector;
-#pragma endregion
 
-#pragma region Interface
 public:
   lsTree() {}
 
@@ -361,7 +358,7 @@ public:
           .print();
       return *this;
     }
-    uint maxNumberOfNodes = pow2(maxDepth + 1) - 1;
+    uint maxNumberOfNodes = lsInternal::pow2(maxDepth + 1) - 1;
     treeNodes.reserve(maxNumberOfNodes);
     // partition in x by median
     maxPointsPerBin = std::ceil((double)N / 16.);
@@ -432,7 +429,7 @@ public:
         }
         largestBinSize = maxBin;
       }
-      numBins = pow2(depth);
+      numBins = lsInternal::pow2(depth);
 
       applyColorToNodes();
 
@@ -460,6 +457,8 @@ public:
   }
 
 private:
+  /// calculates index of level based dimensionality of lsTree instance.
+  /// [DEPRECATED]
   size_t constexpr getNextDimIdx(size_type level)
   {
     return D - 1 - level % (D);
@@ -472,7 +471,7 @@ private:
   {
     depth = level; // new level --> set tree depth
     const size_t num_parents = treeNodes.size();
-    const size_t startOfDirectParents = pow2(level - 1) - 1;
+    const size_t startOfDirectParents = lsInternal::pow2(level - 1) - 1;
 
     // nodes_vector levelNodes;
     for (auto idx = startOfDirectParents; idx < num_parents; ++idx)
@@ -491,7 +490,7 @@ private:
 
       // Sort Range of the root
       // if (level > 1) // otherwise already sorted
-      size_t sortDimIdx = convertToIndex(root->dimensionToSplit);
+      size_t sortDimIdx = lsInternal::convertToIndex(root->dimensionToSplit);
       sortByDim(sortedPoints.begin() + start, sortedPoints.begin() + stop,
                 sortDimIdx);
 
@@ -799,7 +798,7 @@ private:
   void colorChild(lsSmartPointer<treeNode> node, size_t parentColor, int b0,
                   bool isLeft)
   {
-    int b = divByPow2(b0, node->level);
+    int b = lsInternal::divByPow2(b0, node->level);
     node->color = isLeft ? parentColor - b : parentColor + b;
     if (node->left)
       colorChild(node->left, node->color, b0, true);
@@ -913,5 +912,5 @@ private:
   inline size_t getLeftChild(size_t treeNode) { return treeNode * 2 + 1; }
 
   inline size_t getRightChild(size_t treeNode) { return treeNode * 2 + 2; }
-};
+};     // end class lsTree
 #endif // LS_TREE
