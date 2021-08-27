@@ -170,8 +170,8 @@ public:
   {
   public:
     // TODO: Evaluate iterator category
-    using iterator_category =
-        std::bidirectional_iterator_tag; // seems likeliest for now
+    using iterator_category = std::bidirectional_iterator_tag;
+    // seems likeliest for now
     // std::random_access_iterator_tag;
     // std::forward_iterator_tag;
     using value_type = VT;
@@ -189,40 +189,46 @@ public:
     // ranges = [(startBin1, stopBin1), (startBin2, stopBin2),
     //           (startBin3, stopBin3), (startBin4, stopBin4), ... ]
     pointer pos; // ->data[init]
-    treeNode &currentNode;
+    //   treeNode *currentNode;
+
+    // protected:
+    //   lsTree const &owner;
 
   public:
-    treeIterator(){
+    treeIterator(){};
 
-    };
+    // treeIterator(lsTree &tree, range_vector input) : pos(input[0].first), ranges(input), owner(tree){};
 
-    treeIterator(range_vector input) : pos(input[0].first), ranges(input){};
-    treeIterator(range_vector input, size_type start)
-        : pos(input[start].first), ranges(input){};
+    // treeIterator(range_vector input, size_type start)
+    //     : pos(input[start].first), ranges(input), owner(tree){};
+
     treeIterator(range_vector input, pointer start_pos)
         : pos(start_pos), ranges(input){};
-    treeIterator(treeIterator &other)
-        : pos(other.pos), ranges(other.ranges),
-          currentNode(other.currentNode){};
 
-    treeIterator(treeNode &node) : pos(&(this->data[node.start]))
-    {
-      auto bin_range =
-          std::make_pair(&(this->data[node.start]), &(this->data[node.stop]));
-      ranges = range_vector{bin_range};
-      currentNode = node;
-    }
-    treeIterator(nodes_vector &bins) : pos(&(this->data[bins[0].start]))
-    {
-      ranges = range_vector();
-      for (const treeNode &node : bins)
-      {
-        auto bin_range =
-            std::make_pair(&(this->data[node.start]), &(this->data[node.stop]));
-        ranges.push_back(bin_range);
-      }
-      currentNode = bins[0];
-    }
+    treeIterator(range_vector input, pointer start_pos, size_type f_forward)
+        : pos(start_pos + f_forward), ranges(input){};
+    // treeIterator(treeIterator &other)
+    //     : pos(other.pos), ranges(other.ranges),
+    //       currentNode(other.currentNode){};
+
+    // treeIterator(treeNode &node) : pos(&(this->data[node.start]))
+    // {
+    //   auto bin_range =
+    //       std::make_pair(&(this->data[node.start]), &(this->data[node.stop]));
+    //   ranges = range_vector{bin_range};
+    //   currentNode = node;
+    // }
+    // treeIterator(nodes_vector &bins) : pos(&(this->data[bins[0].start]))
+    // {
+    //   ranges = range_vector();
+    //   for (const treeNode &node : bins)
+    //   {
+    //     auto bin_range =
+    //         std::make_pair(&(this->data[node.start]), &(this->data[node.stop]));
+    //     ranges.push_back(bin_range);
+    //   }
+    //   currentNode = bins[0];
+    // }
 
     // treeIterator &operator=(treeIterator &other)
     // {
@@ -233,6 +239,11 @@ public:
     reference operator*() const { return *pos; }
 
     pointer operator->() const { return &(*pos); }
+
+    T operator[](int n) const
+    {
+      return (*pos)[n];
+    }
 
     // reference operator[](size_type) const //optional
 
@@ -246,6 +257,7 @@ public:
     {
       return this->pos != other.pos;
     }
+#pragma region Iterator::Operators
     bool operator<(const treeIterator &other) const // optional
     {
       return this->pos < other.pos;
@@ -312,6 +324,8 @@ public:
       --temp.pos;
       return temp;
     }
+
+#pragma endregion Iterator::Operators
   }; // end class treeIterator
 
   /// const_iterator version of the (tree)Iterator
@@ -330,6 +344,95 @@ public:
   using iterator = treeIterator<point_type>;
   using const_iterator = constTreeIterator<point_type>;
   using range_vector = typename iterator::range_vector;
+
+#pragma region IteratorMethods
+  iterator begin()
+  {
+    if (treeNodes.empty())
+    {
+      lsMessage::getInstance()
+          .addWarning("lsTree was not built. Returning empty iterator.")
+          .print();
+      return iterator();
+    }
+    auto full_range = std::make_pair(&data.front(), &data.back());
+    range_vector all{full_range};
+    return iterator(all, &data.front());
+  };
+  iterator end()
+  {
+    if (treeNodes.empty())
+    {
+      lsMessage::getInstance()
+          .addWarning("lsTree was not built. Returning empty iterator.")
+          .print();
+      return iterator();
+    }
+    auto full_range = std::make_pair(&data.front(), &data.back());
+    range_vector all{full_range};
+    // return iterator(all, data.data() + data.size());
+    // return iterator(all, &(*data.end()));
+    // return iterator(all, &data.back());
+    return iterator(all, &data.front(), data.size() - 1);
+  }
+  // const_iterator begin() const
+  // {
+  //   if (treeNodes.empty())
+  //   {
+  //     lsMessage::getInstance()
+  //         .addWarning("lsTree was not built. Returning empty iterator.")
+  //         .print();
+  //     return const_iterator();
+  //   }
+  //   range_vector all{data.front(), data.back()};
+  //   return const_iterator(all);
+  // };
+  // const_iterator end() const
+  // {
+  //   if (treeNodes.empty())
+  //   {
+  //     lsMessage::getInstance()
+  //         .addWarning("lsTree was not built. Returning empty iterator.")
+  //         .print();
+  //     return const_iterator();
+  //   }
+  //   range_vector all{data.front(), data.back()};
+  //   return const_iterator(all, data.back());
+  // };
+
+  // const_iterator cbegin() const
+  // {
+  //   if (treeNodes.empty())
+  //   {
+  //     lsMessage::getInstance()
+  //         .addWarning("lsTree was not built. Returning empty iterator.")
+  //         .print();
+  //     return const_iterator();
+  //   }
+  //   range_vector all{data.front(), data.back()};
+  //   return const_iterator(all);
+  // };
+  // const_iterator cend() const
+  // {
+  //   if (treeNodes.empty())
+  //   {
+  //     lsMessage::getInstance()
+  //         .addWarning("lsTree was not built. Returning empty iterator.")
+  //         .print();
+  //     return const_iterator();
+  //   }
+  //   range_vector all{data.front(), data.back()};
+  //   return const_iterator(all, data.back());
+  // };
+
+private:
+  nodes_iterator beginLeafs(void)
+  {
+    return std::next(treeNodes.begin(), startLeafs);
+  }
+
+  typename nodes_vector::iterator endLeafs(void) { return treeNodes.end(); }
+#pragma endregion All methods concerning treeIterator useage
 
 public:
   lsTree() {}
@@ -695,92 +798,6 @@ public:
 
   void printBT() { printBT("", treeNodes[0], false); }
 
-#pragma region IteratorMethods
-  iterator begin()
-  {
-    if (treeNodes.empty())
-    {
-      lsMessage::getInstance()
-          .addWarning("lsTree was not built. Returning empty iterator.")
-          .print();
-      return iterator();
-    }
-    auto full_range = std::make_pair(&data.front(), &data.back());
-    range_vector all{full_range};
-    return iterator(all, &data.front());
-  };
-  iterator end()
-  {
-    if (treeNodes.empty())
-    {
-      lsMessage::getInstance()
-          .addWarning("lsTree was not built. Returning empty iterator.")
-          .print();
-      return iterator();
-    }
-    auto full_range = std::make_pair(&data.front(), &data.back());
-    range_vector all{full_range};
-    return iterator(all, &data.back());
-  }
-  const_iterator begin() const
-  {
-    if (treeNodes.empty())
-    {
-      lsMessage::getInstance()
-          .addWarning("lsTree was not built. Returning empty iterator.")
-          .print();
-      return const_iterator();
-    }
-    range_vector all{data.front(), data.back()};
-    return const_iterator(all);
-  };
-  const_iterator end() const
-  {
-    if (treeNodes.empty())
-    {
-      lsMessage::getInstance()
-          .addWarning("lsTree was not built. Returning empty iterator.")
-          .print();
-      return const_iterator();
-    }
-    range_vector all{data.front(), data.back()};
-    return const_iterator(all, data.back());
-  };
-
-  const_iterator cbegin() const
-  {
-    if (treeNodes.empty())
-    {
-      lsMessage::getInstance()
-          .addWarning("lsTree was not built. Returning empty iterator.")
-          .print();
-      return const_iterator();
-    }
-    range_vector all{data.front(), data.back()};
-    return const_iterator(all);
-  };
-  const_iterator cend() const
-  {
-    if (treeNodes.empty())
-    {
-      lsMessage::getInstance()
-          .addWarning("lsTree was not built. Returning empty iterator.")
-          .print();
-      return const_iterator();
-    }
-    range_vector all{data.front(), data.back()};
-    return const_iterator(all, data.back());
-  };
-
-private:
-  nodes_iterator beginLeafs(void)
-  {
-    return std::next(treeNodes.begin(), startLeafs);
-  }
-
-  typename nodes_vector::iterator endLeafs(void) { return treeNodes.end(); }
-#pragma endregion All methods concerning treeIterator useage
-
 #pragma Private Methods
 private:
   /*
@@ -912,5 +929,6 @@ private:
   inline size_t getLeftChild(size_t treeNode) { return treeNode * 2 + 1; }
 
   inline size_t getRightChild(size_t treeNode) { return treeNode * 2 + 2; }
-};     // end class lsTree
+}; // end class lsTree
+
 #endif // LS_TREE
