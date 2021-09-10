@@ -48,6 +48,18 @@ uint checkTree(lsTree<double, D> treeToCheck, size_t N)
   return 1;
 };
 
+template <class T, int D, class container>
+void queryTree(lsTree<T, D> tree, container point)
+{
+
+  auto neighborhood = tree.getBin(point);
+  std::cout << "leafNum: " << neighborhood->leafNum << std::endl;
+  std::cout << "color: " << neighborhood->color << std::endl;
+  std::cout << "level: " << neighborhood->level << std::endl;
+  std::cout << "identifier: " << neighborhood->identifier << std::endl;
+  std::cout << "median: " << neighborhood->dimensionToSplit << " = " << neighborhood->median << std::endl;
+}
+
 template <int D>
 uint testTree(void)
 {
@@ -83,6 +95,7 @@ uint testTree(void)
   // Compute lsTree of volumetric mesh
   auto tree = lsTree<double, D>(mesh);
   tree.apply();
+  tree.addColor(mesh);
   lsVTKWriter(mesh, lsFileFormatEnum::VTU, prefix + "_TreeMesh").apply();
 
   // tree.printBT();
@@ -100,9 +113,14 @@ uint testTree(void)
 
   auto tree2 = lsTree<double, D>(mesh);
   tree2.apply();
+  tree2.addColor(mesh);
   lsVTKWriter(mesh, lsFileFormatEnum::VTU, prefix + "_TreeDiskMesh").apply();
 
   checkTree(tree2, N2);
+
+  auto ptForQuery = centre;
+  ptForQuery[0] += radius;
+  queryTree(tree, ptForQuery);
 
   // PASS!
   return 1;
@@ -149,6 +167,7 @@ uint testTreeWithBox(void)
   // Compute lsTree of volumetric mesh
   auto tree = lsTree<double, D>(mesh);
   tree.apply();
+  tree.addColor(mesh);
   lsVTKWriter(mesh, lsFileFormatEnum::VTU, prefix + "_TreeMesh").apply();
 
   // tree.printBT();
@@ -166,13 +185,12 @@ uint testTreeWithBox(void)
 
   auto tree2 = lsTree<double, D>(mesh);
   tree2.apply();
+  tree2.addColor(mesh);
   lsVTKWriter(mesh, lsFileFormatEnum::VTU, prefix + "_TreeDiskMesh").apply();
 
   checkTree(tree2, N2);
 
-  // std::array<double, 3> point{bounds[0] + 1, bounds[2] + 1, bounds[4]};
-  // auto treeIt = tree2.getNearestNeighbors(point);
-  // std::cout << *treeIt;
+  queryTree(tree, botLeft);
 
   // PASS!
   return 1;

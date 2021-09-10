@@ -13,20 +13,6 @@
 #include <lsTest.hpp>
 #include <lsTestAsserts.hpp>
 
-template <typename T = double, int D = 3>
-std::ostream &operator<<(std::ostream &os, std::array<T, D> point)
-{
-  os << "(" << point[0] << ", " << point[1] << ", " << point[2] << ")";
-  return os;
-};
-
-// template <typename T = double, int D = 3>
-// std::ostream &operator<<(std::ostream &os, typename lsTree<T, D>::template treeIterator<std::array<T, D>> point)
-// {
-//   os << "(" << point[0] << ", " << point[1] << ", " << point[2] << ")";
-//   return os;
-// };
-
 template <int D>
 uint checkTree(lsTree<double, D> treeToCheck, size_t N)
 {
@@ -60,6 +46,52 @@ uint checkTree(lsTree<double, D> treeToCheck, size_t N)
                             { return item == N; }));
   return 1;
 };
+
+// --- PRINT FUNCTIONS
+// TODO: move to lsTree?
+
+template <typename Point>
+void print_point(Point &p)
+{
+  std::cout << "(" << p[0] << ", " << p[1] << ", " << p[2] << ")";
+  // std::cout << "(" << *p[0][0] << "," << *p[0][1] << "," << *p[0][2] << ")" << std::endl;
+};
+
+template <typename T = double, std::size_t D = 3>
+std::ostream &operator<<(std::ostream &os, std::array<T, D> point)
+{
+  os << "(" << point[0] << ", " << point[1] << ", " << point[2] << ")";
+  return os;
+};
+
+template <class iterator>
+void print_iterator(iterator p)
+{
+  auto pos = *(p.pos);
+  std::cout << "Iterator(pos= " << p.pos << ", segment= " << p.segment << ") = " << pos;
+};
+
+std::ostream &operator<<(std::ostream &os, lsTree<double, 2>::iterator p)
+{
+  auto pos = *(p.pos);
+  os << "Iterator(pos= " << p.pos << ", segment= " << p.segment << ") = " << pos;
+  return os;
+};
+
+std::ostream &operator<<(std::ostream &os, lsTree<double, 3>::iterator p)
+{
+  auto pos = *(p.pos);
+  os << "Iterator(pos= " << p.pos << ", segment= " << p.segment << ") = " << pos;
+  return os;
+};
+
+template <typename Left, typename Right>
+void compare(Left left, Right right)
+{
+  std::cout << left << " =? " << right << " [" << (left == right ? "Y]" : "N]") << std::endl;
+};
+
+// --- UNIT TESTS
 
 template <int D>
 uint testTreeIterator(void)
@@ -111,64 +143,74 @@ uint testTreeIterator(void)
 
   // Test treeIterator
   int cnt;
-  auto print_iterator = [](auto p)
-  {
-    std::cout << "Iterator(pos= " << p.pos << ", segment= " << p.segment << ")"
-              << std::endl;
-    auto pos = *(p.pos);
-    std::cout << "(" << pos[0] << ")" << std::endl;
-  };
 
-  auto print_point_pointer = [](auto p)
-  {
-    std::cout << "(" << (*p)[0] << ", " << p[1] << ", " << p[2] << ")" << std::endl;
-  };
-
-  auto print_point = [](auto p)
-  {
-    std::cout << "(" << p[0] << ", " << p[1] << ", " << p[2] << ")";
-    // std::cout << "(" << *p[0][0] << "," << *p[0][1] << "," << *p[0][2] << ")" << std::endl;
-  };
-
-  auto compare = [](auto left, auto right)
-  {
-    std::cout << left << " =? " << right << " [" << (left == right ? "Y]" : "N]") << std::endl;
-  };
-
+  // traditional index based
   auto traditional_for = [&](size_t ptsToPrint)
   {
-    cnt = 0;
-    std::cout << "\nFOR LOOP (traditional) [" << ptsToPrint << " pts]" << std::endl;
-    // for (auto point : tree)
-    for (auto point = tree.begin(); cnt < ptsToPrint; ++point)
-    // for (auto point = tree.data.begin(); cnt < ptsToPrint; ++point)
+    std::cout << "\nFOR LOOP (int i = 0; i < ptsToPrint; ++i) [" << ptsToPrint << " pts]" << std::endl;
+    auto begin = tree.begin();
+    if (ptsToPrint < 11)
     {
-      ++cnt;
-      // print_point_pointer(point);
+      for (cnt = 0; cnt < ptsToPrint; ++cnt)
+      {
+        auto point = begin + cnt;
+        std::cout << point << "\n";
+      }
     }
-    // std::cout << std::endl;
+    else
+    {
+      for (cnt = 0; cnt < ptsToPrint; ++cnt)
+      {
+        auto point = begin + cnt;
+      }
+    }
     LSTEST_ASSERT(cnt == ptsToPrint)
     std::cout << cnt << " vs " << ptsToPrint << std::endl;
-    print_point(tree.data[cnt - 1]);
-    std::cout << " vs ";
-    print_point(tree.data[ptsToPrint - 1]);
-    std::cout << std::endl;
+    std::cout << tree.data[cnt - 1] << " vs " << tree.data[ptsToPrint - 1] << std::endl;
   };
 
-  auto begin_end_for = [&](size_t ptsToPrint)
+  // begin-end-style
+  auto begin_end_for_copy = [&]()
   {
     cnt = 0;
-    std::cout << "\nFOR LOOP (begin-end) [" << ptsToPrint << " pts]";
-    // for (auto point : tree)
+    auto begin = tree.begin();
     auto end = tree.end();
-    for (auto &&point = tree.begin(); point != end; ++point)
-    // for (auto point = tree.data.begin(); cnt < ptsToPrint; ++point)
+    auto ptsToPrint = end - begin;
+
+    std::cout << "\nFOR LOOP (auto point = tree.begin(); point != end; ++point) [" << ptsToPrint << " pts]";
+
+    for (auto point = begin; point != end; ++point)
+    {
+      ++cnt;
+      if (cnt > N)
+      {
+        std::cout << "OVERSHOOT: " << point << std::endl;
+        break;
+      }
+    }
+    std::cout << std::endl;
+    ++cnt; // discrepancy due to for-body not executing...could also start at 1 or move into for(...; end-stmnt)
+    // LSTEST_ASSERT(cnt == ptsToPrint)
+    std::cout << cnt << " vs " << ptsToPrint << std::endl;
+    std::cout << tree.data[cnt - 1] << " vs " << tree.data[ptsToPrint - 1] << " vs " << end << std::endl;
+  };
+
+  auto begin_end_for_ref = [&]()
+  {
+    cnt = 0;
+    auto begin = tree.begin();
+    auto end = tree.end();
+    auto ptsToPrint = end - begin;
+
+    std::cout << "\nFOR LOOP (auto &point = begin; point != end; ++point) [" << ptsToPrint << " pts]";
+
+    for (auto &point = begin; point != end; ++point)
     {
       ++cnt;
       if (cnt > N)
       {
         std::cout << "OVERSHOOT: ";
-        print_point_pointer(point);
+        print_point(point);
         break;
       }
     }
@@ -176,19 +218,41 @@ uint testTreeIterator(void)
     ++cnt;
     // LSTEST_ASSERT(cnt == ptsToPrint)
     std::cout << cnt << " vs " << ptsToPrint << std::endl;
-    // compare()
-    print_point(tree.data[cnt - 1]);
-    std::cout << " vs ";
-    print_point(tree.data[ptsToPrint - 1]);
-    std::cout << " vs ";
-    print_point(end);
-    std::cout << std::endl;
+    std::cout << tree.data[cnt - 1] << " vs " << tree.data[ptsToPrint - 1] << " vs " << end << std::endl;
   };
 
+  auto begin_end_for_forward = [&]()
+  {
+    cnt = 0;
+    auto begin = tree.begin();
+    auto end = tree.end();
+    auto ptsToPrint = end - begin;
+
+    std::cout << "\nFOR LOOP (auto &&point = begin; point != end; ++point) [" << ptsToPrint << " pts]";
+
+    for (auto &&point = begin; point != end; ++point)
+    {
+      ++cnt;
+      if (cnt > N)
+      {
+        std::cout << "OVERSHOOT: ";
+        print_point(point);
+        break;
+      }
+    }
+    std::cout << std::endl;
+    ++cnt;
+    // LSTEST_ASSERT(cnt == ptsToPrint)
+    std::cout << cnt << " vs " << ptsToPrint << std::endl;
+    std::cout << tree.data[cnt - 1] << " vs " << tree.data[ptsToPrint - 1] << " vs " << end << std::endl;
+  };
+
+  // test begin and end methods
   auto begin_end_test = [&](auto beginShould, auto endShould)
   {
     std::cout << "\nBEGIN" << std::endl;
     auto begin = tree.begin();
+
     auto im_lazy = [&](auto left, auto right)
     {
       print_point(left);
@@ -207,18 +271,18 @@ uint testTreeIterator(void)
 
   traditional_for(10);
   traditional_for(N);
-  begin_end_for(N);
+
+  begin_end_for_copy();
+  begin_end_for_ref();
+  begin_end_for_forward();
+
   begin_end_test(&tree.data.front(), &tree.data.back());
 
-  std::cout << "\nRANGE-FOR LOOP (init-stmnt; type item : cntnr)";
+  std::cout << "\nRANGE-FOR LOOP 0 (init-stmnt; type item : cntnr)";
   cnt = 0;
-  for (auto &point : tree)
+  for (auto point : tree)
   {
     ++cnt;
-    // std::cout << ++cnt << ": (" << point[0] << ", "
-    //           << point[1] << ", "
-    //           << point[2] << ", "
-    //           << ")\n";
     if (cnt == N)
     {
       std::cout << "OVERSHOOT: " << &point << " aka ("
@@ -233,17 +297,49 @@ uint testTreeIterator(void)
   std::cout << std::endl;
   // LSTEST_ASSERT(cnt == N)
   std::cout << cnt << " vs " << N << std::endl;
-  print_point(tree.data[cnt - 1]);
-  std::cout << " vs ";
-  print_point(tree.data[N - 1]);
-  std::cout << std::endl;
+  compare(tree.data[cnt - 1], tree.data[N - 1]);
 
-  std::cout << "\nRANGE-FOR LOOP on std::vector" << std::endl;
-  std::vector<int> testitest(10, -1);
-  int cnt2 = 0;
-  for (auto val : testitest)
-    ++cnt2;
-  std::cout << cnt2 << std::endl;
+  std::cout << "\nRANGE-FOR LOOP 1 (init-stmnt; type& item : cntnr)";
+  cnt = 0;
+  for (auto &point : tree)
+  {
+    ++cnt;
+    if (cnt == N)
+    {
+      std::cout << "OVERSHOOT: " << &point << " aka ("
+                << point[0] << ", "
+                << point[1] << ", "
+                << point[2] << ")"
+                << std::endl;
+      break;
+    }
+  }
+  ++cnt;
+  std::cout << std::endl;
+  // LSTEST_ASSERT(cnt == N)
+  std::cout << cnt << " vs " << N << std::endl;
+  compare(tree.data[cnt - 1], tree.data[N - 1]);
+
+  std::cout << "\nRANGE-FOR LOOP 2 (init-stmnt; type&& item : cntnr)";
+  cnt = 0;
+  for (auto &&point : tree)
+  {
+    ++cnt;
+    if (cnt == N)
+    {
+      std::cout << "OVERSHOOT: " << &point << " aka ("
+                << point[0] << ", "
+                << point[1] << ", "
+                << point[2] << ")"
+                << std::endl;
+      break;
+    }
+  }
+  ++cnt;
+  std::cout << std::endl;
+  // LSTEST_ASSERT(cnt == N)
+  std::cout << cnt << " vs " << N << std::endl;
+  compare(tree.data[cnt - 1], tree.data[N - 1]);
 
   // PASS!
   return 1;
