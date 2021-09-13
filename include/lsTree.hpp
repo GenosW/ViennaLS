@@ -137,6 +137,7 @@ public:
   using node_pointer = lsSmartPointer<treeNode>;
   using nodes_vector = std::vector<node_pointer>;
   using nodes_iterator = typename std::vector<node_pointer>::iterator;
+  using nodes_const_iterator = typename std::vector<node_pointer>::const_iterator;
 
 private:
   // ---------- Parameters ----------
@@ -247,7 +248,16 @@ private:
     return std::next(treeNodes.begin(), startLeafs);
   }
 
-  typename nodes_vector::iterator endLeafs(void) { return treeNodes.end(); }
+  nodes_const_iterator beginLeafs(void) const
+  {
+    return std::next(treeNodes.begin(), startLeafs);
+  }
+
+  // typename nodes_vector::iterator
+  nodes_iterator endLeafs(void) { return treeNodes.end(); }
+
+  nodes_const_iterator endLeafs(void) const { return treeNodes.end(); }
+
 #pragma endregion All methods concerning treeIterator useage
 
 public:
@@ -344,7 +354,10 @@ public:
       // Build the tree
       auto binSize = N;
       // in-place construction of root
-      treeNodes.emplace_back(lsSmartPointer<treeNode>::New(0, D, 0, N, data[0][sortedPoints[N / 2]][D]));
+      // "highest" coord = D - 1
+      // e.g. D = 2 --> coord = 1 ^= y
+      // e.g. D = 3 --> coord = 2 ^= z
+      treeNodes.emplace_back(lsSmartPointer<treeNode>::New(0, D, 0, N, data[0][sortedPoints[N / 2]][D - 1]));
 
       for (size_type level = 1; (level < maxDepth + 1) && (binSize > maxPointsPerBin); ++level)
       {
@@ -510,20 +523,6 @@ public:
     return thisNode;
   }
 
-  // template <typename Tv>
-  // lsSmartPointer<treeNode> getBin(const hrleVectorType<Tv, 3> &vector) const
-  // {
-  //   point_type pt{vector[0], vector[1], vector[2]};
-  //   return this->getBin(pt);
-  // }
-
-  // template <typename Tv>
-  // lsSmartPointer<treeNode> getBin(const hrleVectorType<Tv, 2> &vector) const
-  // {
-  //   point_type pt{vector[0], vector[1], 0.};
-  //   return this->getBin(pt);
-  // }
-
   template <typename Tv, int Dv>
   lsSmartPointer<treeNode> getBin(const hrleVectorType<Tv, Dv> &vector) const
   {
@@ -564,9 +563,11 @@ public:
 
   nodes_vector &getTreeNodes() { return treeNodes; }
 
-  template <class iteratorType = iterator>
-  iteratorType getNearestNeighbors(const point_type &point)
+  // iteratorType getNearestNeighbors(const point_type &point)
+  template <class Point, class iteratorType = iterator>
+  iteratorType getNearestNeighbors(const Point &point)
   {
+    // TODO: Make interface nicer, to accept more types of containers...?
     if (treeNodes.empty())
     {
       lsMessage::getInstance()
@@ -630,7 +631,7 @@ public:
   {
 #ifndef NDEBUG // if in debug build
     {
-      auto numLeafs = this->beginLeafs() - this->beginLeafs();
+      auto numLeafs = this->endLeafs() - this->beginLeafs();
       bool check = numBins == numLeafs;
       if (!check)
         lsMessage::getInstance().addDebug("lsTree: numBins: " + std::to_string(numBins) + " <= numLeafs:" + std::to_string(numLeafs)).print();

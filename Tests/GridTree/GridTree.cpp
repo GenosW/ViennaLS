@@ -48,20 +48,37 @@ uint checkTree(lsTree<double, D> treeToCheck, size_t N)
   return 1;
 };
 
-template <class T, int D, class container>
-void queryTree(lsTree<T, D> tree, container point)
+template <class T, int D>
+void showTreeRange(lsTree<T, D> tree)
 {
+  auto &treeNodes = tree.getTreeNodes();
+  auto size = treeNodes.size();
+  auto numberOfLeafs = tree.getNumberOfLeafs();
+  auto &first = treeNodes[size - numberOfLeafs];
+  auto &last = treeNodes.back();
+  std::cout << "colorRange:   [" << first->color << ", " << last->color << "]\n";
+  std::cout << "nodeIdxRange: [" << first->leafNum << ", " << last->leafNum << "]" << std::endl;
+}
 
+template <class T, int D, class container>
+void queryTree(lsTree<T, D> tree, container point, uint expectedBot, uint expectedTop, std::string name)
+{
+  std::cout << "Getting neighborhood for point: " << name << point << "\n";
   auto neighborhood = tree.getBin(point);
-  std::cout << "leafNum: " << neighborhood->leafNum << std::endl;
-  std::cout << "color: " << neighborhood->color << std::endl;
-  std::cout << "level: " << neighborhood->level << std::endl;
-  std::cout << "identifier: " << neighborhood->identifier << std::endl;
-  std::cout << "median: " << neighborhood->dimensionToSplit << " = " << neighborhood->median << std::endl;
+  std::cout << "    leafNum: " << neighborhood->leafNum << "\n";
+  std::cout << "    color: " << neighborhood->color << "\n";
+  std::cout << "    level: " << neighborhood->level << "\n";
+  std::cout << "    identifier: " << neighborhood->identifier << "\n";
+  std::cout << "    median: " << neighborhood->dimensionToSplit << " = " << neighborhood->median << std::endl;
+  if (expectedBot != 0 && expectedTop != 0)
+    std::cout << "    ("
+              << expectedBot << "<=" << neighborhood->color
+              << " <= " << expectedTop << "): "
+              << (expectedBot <= neighborhood->color <= expectedTop) << std::endl;
 }
 
 template <int D>
-uint testTree(void)
+uint testTreeWithSphere(void)
 {
   // constexpr int D = Dim;
   std::cout << "D: " << D << std::endl;
@@ -95,7 +112,8 @@ uint testTree(void)
   // Compute lsTree of volumetric mesh
   auto tree = lsTree<double, D>(mesh);
   tree.apply();
-  tree.addColor(mesh);
+  // Debug tools
+  tree.addColor(mesh); // TODO: Wrap in creation of mesh based on lsTree.data nodes
   lsVTKWriter(mesh, lsFileFormatEnum::VTU, prefix + "_TreeMesh").apply();
 
   // tree.printBT();
@@ -103,7 +121,15 @@ uint testTree(void)
 
   checkTree(tree, N);
 
-  //---DiskMesh
+  auto left = centre, top = centre;
+  left[0] += radius;
+  top[D - 1] += radius;
+
+  showTreeRange(tree);
+  queryTree(tree, top, -15, 15, "top");
+  queryTree(tree, left, -15, -15, "left");
+
+  // //---DiskMesh
   std::cout << "--- DiskMesh: " << std::endl;
   lsToDiskMesh<double, D>(levelSet, mesh).apply();
   lsVTKWriter(mesh, lsFileFormatEnum::VTU, prefix + "_DiskMesh").apply();
@@ -118,9 +144,9 @@ uint testTree(void)
 
   checkTree(tree2, N2);
 
-  auto ptForQuery = centre;
-  ptForQuery[0] += radius;
-  queryTree(tree, ptForQuery);
+  showTreeRange(tree2);
+  queryTree(tree2, top, -15, 15, "top");
+  queryTree(tree2, left, -15, -15, "left");
 
   // PASS!
   return 1;
@@ -153,8 +179,12 @@ uint testTreeWithBox(void)
       .apply();
   size_t N = levelSet->getDomain().getNumberOfPoints();
 
-  std::cout << "Initial: " << std::endl;
-  std::cout << "Number of points: " << N << std::endl;
+  std::cout << "Box: \n";
+  std::cout << "         #--------------------------" << topRight << " :topRight"
+            << "\n";
+  std::cout << "botLeft: " << botLeft << "-----------------------#"
+            << "\n";
+  std::cout << "N: " << N << std::endl;
 
   // --- Volumetric mesh
   std::cout << "--- Mesh: " << std::endl;
@@ -175,6 +205,10 @@ uint testTreeWithBox(void)
 
   checkTree(tree, N);
 
+  showTreeRange(tree);
+  queryTree(tree, botLeft, -15, 15, "botLeft");
+  queryTree(tree, topRight, -15, 15, "topRight");
+
   //---DiskMesh
   std::cout << "--- DiskMesh: " << std::endl;
   lsToDiskMesh<double, D>(levelSet, mesh).apply();
@@ -190,7 +224,9 @@ uint testTreeWithBox(void)
 
   checkTree(tree2, N2);
 
-  queryTree(tree, botLeft);
+  showTreeRange(tree2);
+  queryTree(tree2, botLeft, -15, 15, "botLeft");
+  queryTree(tree2, topRight, -15, 15, "topRight");
 
   // PASS!
   return 1;
@@ -204,9 +240,9 @@ int main(int argc, char **argv)
   uint test_3d_box = 0;
 
   std::cout << "############### SPHERE ##############" << std::endl;
-  test_2d_sphere = testTree<2>();
+  test_2d_sphere = testTreeWithSphere<2>();
   std::cout << "------------- NEXT TEST -------------" << std::endl;
-  test_3d_sphere = testTree<3>();
+  test_3d_sphere = testTreeWithSphere<3>();
   std::cout << "################ BOX ################" << std::endl;
   test_2d_box = testTreeWithBox<2>();
   std::cout << "------------- NEXT TEST -------------" << std::endl;
