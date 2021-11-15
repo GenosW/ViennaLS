@@ -3,12 +3,9 @@
 #define LS_TREE
 #include <algorithm>
 #include <numeric>
-//#include<cstdint>
-//#include <iterator>
 #include <lsDimension.hpp>
 #include <lsSmartPointer.hpp>
 #include <lsToDiskMesh.hpp>
-//#include <utility>
 #include <vector>
 
 // #define REORDER
@@ -23,9 +20,10 @@ namespace lsInternal
   }
 
   // all depth values are known at compile time
-  constexpr int64_t pow2(int exp) { return 1 << exp; }
+  constexpr int64_t pow2(int64_t exp) { return 1 << exp; }
 
-  constexpr int64_t divByPow2(int num, int exp) { return num >> exp; }
+  // fast (constexpr) function to calculate: num / 2^exp
+  constexpr int64_t divByPow2(int64_t num, int64_t exp) { return num >> exp; }
 
   template <int D>
   std::size_t inline convertToIndex(lsInternal::Dimension<D> dim)
@@ -33,37 +31,49 @@ namespace lsInternal
     return dim.toArrayIndex();
   }
 
-  enum struct meanEnum : unsigned
+  template <typename Point>
+  void print_point(Point &p, std::ostream &os = std::cout)
   {
-    MEDIAN = 0,
-    ARITHMETIC = 1,
-    // GEOMETRIC = 2,
-    HARMONIC = 3,
+    os << "[" << p[0] << ", " << p[1] << ", " << p[2] << "]";
+    // so << "(" << *p[0][0] << "," << *p[0][1] << "," << *p[0][2] << ")" << std::endl;
   };
 
-  template <typename Point>
-  void print_point(Point &p)
+#ifndef __cpp_lib_interpolate
+  /// Implementation of C++20 std::midpoint (defined in <numeric>)
+  /// in case it use not implemented (e.g. when compiling with C++17)
+  template <class T>
+  constexpr std::enable_if_t<std::is_floating_point_v<T>, T>
+  midpoint(T a, T b) noexcept
   {
-    std::cout << "[" << p[0] << ", " << p[1] << ", " << p[2] << "]";
-    // std::cout << "(" << *p[0][0] << "," << *p[0][1] << "," << *p[0][2] << ")" << std::endl;
+    if (std::isnan(a) || std::isnan(b))
+      return std::numeric_limits<T>::quiet_NaN();
+    else
+      return std::isnormal(a) && std::isnormal(b)
+                 ? a / 2 + b / 2
+                 : (a + b) / 2;
   };
+#else
+  using std::midpoint;
+#endif
 } // end namespace lsInternal
 
 /// Tree structure that seperates a domain
 ///
-/// TODO: clean up parameters, member functions and attributes
-/// TODO: order
 ///
 /// Types:
 ///
+/// using Dim = typename lsInternal::Dimension<D>;
 /// using value_type = T;
-/// using size_type = std::size_type
+/// using size_type = std::size_t;
 /// using point_type = std::array<T, 3>;
-/// using Data_Container = std::vector<point_type>;
-/// using iterator = treeIterator<point_type>;
-/// using const_iterator = constTreeIterator<point_type>;
-/// using range_vector = typename iterator::range_vector;
+/// using Bin = std::vector<point_type>;
+/// using Data_Container = std::vector<Bin>;
+/// using iterator = typename Bin::iterator;
+/// using const_iterator = typename Bin::const_iterator;
 /// using nodes_vector = std::vector<lsSmartPointer<treeNode>>;
+/// using nodes_iterator = typename std::vector<lsSmartPointer<treeNode>>::iterator;
+/// using nodes_const_iterator = typename std::vector<lsSmartPointer<treeNode>>::const_iterator;
+
 template <class T, int D>
 class lsTree
 {
@@ -145,8 +155,7 @@ public:
 
     friend std::ostream &operator<<(std::ostream &os, const treeNode &node)
     {
-      // os << node.color << ": [" << node.start << ", " << node.top << "]";
-      os << "Hi";
+      os << node.color << ": [" << node.start << ", " << node.top << "]";
       return os;
     }
 
@@ -170,11 +179,10 @@ private:
   std::string tree_type = "kd-Tree";
   bool frozen = false;
   bool dataGiven = false;
-  // TODO: Validate the maxDepth setting. Too deep/too shallow/just right?
+  bool useBestSplit = false;
   size_type maxDepth = 4; // TODO: maxDepth prop log10(N)
   size_type maxNumBins = lsInternal::pow2(maxDepth);
   size_type maxPointsPerBin = 4;
-  lsInternal::meanEnum meanMethod = lsInternal::meanEnum::MEDIAN;
 
 public:
   Data_Container data;
@@ -216,6 +224,10 @@ public:
     }
     return data.end(); // FIXME: just to show what should come out
   }
+
+  // The following iterator (interfaces) aren't yet implemented.
+  // These just represent a general look. 
+
   // const_iterator begin() const
   // {
   //   if (treeNodes.empty())
@@ -267,6 +279,8 @@ public:
   // };
 
 private:
+  // Some helper methods to access only the leaf nodes
+
   nodes_iterator beginLeafs(void)
   {
     return std::next(treeNodes.begin(), startLeafs);
@@ -277,7 +291,6 @@ private:
     return std::next(treeNodes.begin(), startLeafs);
   }
 
-  // typename nodes_vector::iterator
   nodes_iterator endLeafs(void) { return treeNodes.end(); }
 
   nodes_const_iterator endLeafs(void) const { return treeNodes.end(); }
@@ -322,13 +335,6 @@ public:
     }
 #endif
   }
-
-  //
-  // lsTree(ContainerToWrap container)
-  //     : data(container.getData()),
-  //       N(container.getData().size()) {}
-
-  //~lsTree() {}
 
   /// entry point
   lsTree &apply(bool byLevel = true)
@@ -381,7 +387,7 @@ public:
       // "highest" coord = D - 1
       // e.g. D = 2 --> coord = 1 ^= y
       // e.g. D = 3 --> coord = 2 ^= z
-      root = lsSmartPointer<treeNode>::New(0, D, 0, N, data[0][sortedPoints[N / 2]][D - 1]);
+      root = lsSmartPointer<treeNode>::New(0, Dim(D - 1), 0, N, data[0][sortedPoints[N / 2]][D - 1]);
 
 #ifndef NDEBUG // if in debug build
       {
@@ -405,20 +411,22 @@ public:
       }
 
       numBins = lsInternal::pow2(depth);
-
-      applyColorToNodes(); // Assemble array of colors for each point
-      // TODO: Refactor assembly of color
-      color = std::vector<T>(N);
-      for (auto it = beginLeafs(); it < treeNodes.end(); ++it)
+#ifndef NDEBUG // if in debug build
       {
-        auto treeNode = *it;
-        for (size_type idx = treeNode->start; idx < treeNode->stop; ++idx)
+        applyColorToNodes(); // Assemble array of colors for each point
+        // TODO: Refactor assembly of color
+        color = std::vector<T>(N);
+        for (auto it = beginLeafs(); it < treeNodes.end(); ++it)
         {
-          unsigned originalIndex = sortedPoints[idx];
-          color[originalIndex] = treeNode->color;
+          auto treeNode = *it;
+          for (size_type idx = treeNode->start; idx < treeNode->stop; ++idx)
+          {
+            unsigned originalIndex = sortedPoints[idx];
+            color[originalIndex] = treeNode->color;
+          }
         }
       }
-
+#endif
       sortByIndicesInplace(data, sortedPoints);
     }
     /// TODO: Implement and support byDepth build properly
@@ -436,13 +444,6 @@ public:
   }
 
 private:
-  /// calculates index of level based dimensionality of lsTree instance.
-  /// [DEPRECATED]
-  size_type constexpr getNextDimIdx(size_type level)
-  {
-    return D - 1 - level % (D);
-  }
-
   /// Builds the tree level-by-level
   ///
   ///
@@ -467,84 +468,53 @@ private:
       const auto leftRange = range / 2;
       const auto rightRange = range - leftRange;
 
+      // Figure where the sorting should take place!
+
       // Sort Range of the root
       // if (level > 1) // otherwise already sorted
-      Dim nextSplitDim = root->dimensionToSplit--;
-      // auto sortDimIdx = lsInternal::convertToIndex(root->dimensionToSplit);
-      auto sortDimIdx = lsInternal::convertToIndex(nextSplitDim);
-      // sortByDim(sortedPoints.begin() + start, sortedPoints.begin() + stop,
-      //           sortDimIdx);
-
-      // Make 2 new nodes
-      auto leftMedianIndex = start + leftRange / 2;
-      auto rightMedianIndex = start + leftRange + rightRange / 2;
-
-      T leftAverage = 0, rightAverage = 0;
-      if (meanMethod == lsInternal::meanEnum::MEDIAN)
+      Dim nextSplitDim;
+      if (this->useBestSplit)
       {
-        // median = lookup Point from original data
-        auto get_median = [this, &sortedPoints, sortDimIdx](size_type medianIndex, size_type range)
-        {
-          auto result = (range % 2 == 0) ? (
-                                               (data[0][sortedPoints[medianIndex]][sortDimIdx] +
-                                                data[0][sortedPoints[medianIndex - 1]][sortDimIdx]) /
-                                               2)
-                                         : (data[0][sortedPoints[medianIndex]][sortDimIdx]);
-          return result;
-        };
-        // T median = data[0][sortedPoints[leftMedianIndex]][sortDimIdx];
-        // if (leftRange % 2 == 0)
-        // {
-        //   median = (median + data[0][sortedPoints[leftMedianIndex - 1]][sortDimIdx]) / 2;
-        // }
-        // arithmetic middle if an even number of elements are in the leftRange
-        // arithmetic middle if an even number of elements are in the rightRange
-        // median = (rightRange % 2 == 0) ? ((data[0][sortedPoints[rightMedianIndex]][sortDimIdx] + data[0][sortedPoints[rightMedianIndex - 1]][sortDimIdx]) / 2) : data[0][sortedPoints[rightMedianIndex]][sortDimIdx];
-        leftAverage = get_median(leftMedianIndex, leftRange);
-        rightAverage = get_median(rightMedianIndex, rightRange);
-      }
-      else if (meanMethod == lsInternal::meanEnum::ARITHMETIC)
-      {
-        // std::reduce(std::execution::par, v.cbegin(), v.cend())
-
-        for (uint idx = start; idx < start + leftRange; ++idx)
-        {
-          leftAverage += data[0][sortedPoints[idx]][sortDimIdx];
-        }
-        leftAverage /= leftRange;
-
-        for (uint idx = start + leftRange; idx < stop; ++idx)
-        {
-          rightAverage += data[0][sortedPoints[idx]][sortDimIdx];
-        }
-        rightAverage /= rightRange;
-      }
-      else if (meanMethod == lsInternal::meanEnum::HARMONIC)
-      {
-        for (uint idx = start; idx < start + leftRange; ++idx)
-        {
-          leftAverage += 1 / data[0][sortedPoints[idx]][sortDimIdx];
-        }
-        leftAverage = leftRange / leftAverage;
-
-        for (uint idx = start + leftRange; idx < stop; ++idx)
-        {
-          rightAverage += 1 / data[0][sortedPoints[idx]][sortDimIdx];
-        }
-        rightAverage = rightRange / rightAverage;
+        unsigned nextIdx = computeNextBestSplitDimension(sortedPoints.begin() + start, sortedPoints.begin() + stop);
+        Dim nextSplitDim(nextIdx);
       }
       else
       {
-        leftAverage = 0;
-        rightAverage = 0;
+        nextSplitDim = root->dimensionToSplit--;
       }
+      unsigned sortDimIdx = lsInternal::convertToIndex(nextSplitDim);
 
-      root->left = lsSmartPointer<treeNode>::New(level, nextSplitDim, start, start + leftRange, leftAverage, root);
-      root->right = lsSmartPointer<treeNode>::New(
-          level, nextSplitDim, start + leftRange, stop, rightAverage, root);
+      // Make 2 new nodes
+      unsigned leftMedianIndex = start + leftRange / 2;
+      unsigned rightMedianIndex = start + leftRange + rightRange / 2;
 
-      sortByDim(sortedPoints.begin() + start, sortedPoints.begin() + stop,
-                sortDimIdx);
+      T leftAverage = 0, rightAverage = 0;
+
+      // [start:stop] --> [start : leftStop] | [rightstart : stop]
+      //              --> [start : leftStop] | [leftStop   : stop]
+      const auto leftStart = start, leftStop = start + leftRange;
+      const auto rightStart = leftStop, rightStop = stop;
+      sortByDim(sortedPoints.begin() + leftStart, sortedPoints.begin() + leftStop, sortDimIdx);
+      sortByDim(sortedPoints.begin() + rightStart, sortedPoints.begin() + rightStop, sortDimIdx);
+
+      // median = lookup Point from original data
+      auto get_median = [this, &sortedPoints, sortDimIdx](size_type medianIndex, size_type range)
+      {
+        // auto result = (range % 2 == 0) ? (
+        //                                      (data[0][sortedPoints[medianIndex]][sortDimIdx] +
+        //                                       data[0][sortedPoints[medianIndex - 1]][sortDimIdx]) /
+        //                                      2)
+        //                                : (data[0][sortedPoints[medianIndex]][sortDimIdx]);
+        auto result = (range % 2 == 0) ? lsInternal::midpoint(data[0][sortedPoints[medianIndex]][sortDimIdx], data[0][sortedPoints[medianIndex - 1]][sortDimIdx])
+                                       : (data[0][sortedPoints[medianIndex]][sortDimIdx]);
+        return result;
+      };
+
+      leftAverage = get_median(leftMedianIndex, leftRange);
+      rightAverage = get_median(rightMedianIndex, rightRange);
+
+      root->left = lsSmartPointer<treeNode>::New(level, nextSplitDim, leftStart, leftStop, leftAverage, root);
+      root->right = lsSmartPointer<treeNode>::New(level, nextSplitDim, rightStart, rightStop, rightAverage, root);
 
 #ifndef NDEBUG // if in debug build
       {
@@ -565,48 +535,11 @@ private:
     return treeNodes.size() - num_parents;
   }
 
-  /// builds a treeNode of the tree and returns a pointer
-  ///
-  /// checks if it should be a leaf treeNode
-  /// TODO: Messy template
-  // template <class Vector, class VectorData>
-  // lsSmartPointer<treeNode> buildByDepth(Vector &data, VectorData &originalData,
-  //                                       size_type start, size_type stop,
-  //                                       size_type level)
-  // {
-  //   size_type range = stop - start;
-  //   if ((range < maxPointsPerBin) || (level > maxDepth))
-  //     return nullptr;
-  //   size_type leftRange = range / 2;
-  //   depth = (depth < level) ? level : depth;
-  //   // size_type thisIndex = index++;
-
-  //   // thisNodes split dimension
-  //   size_type dim = D - level % (D + 1); // offset
-  //   //++index;
-
-  //   T median = originalData[data[0][start + leftRange / 2]][dim];
-  //   auto thisNode =
-  //       lsSmartPointer<treeNode>::New(level, dim, start, stop, median);
-  //   treeNodes.push_back(thisNode);
-  //   // thisNode->setRange(start, stop);
-  //   // thisNode->level = level;
-  //   // thisNode->dimensionToSplit = dim;
-
-  //   thisNode->left =
-  //       buildByDepth(data, originalData, start, start + leftRange, level + 1);
-  //   thisNode->right =
-  //       buildByDepth(data, originalData, start + leftRange, stop, level + 1);
-  //   // thisNode->isLeaf = (thisNode->left != nullptr || thisNode->right !=
-  //   // nullptr ) ? false : true;
-
-  //   return thisNode;
-  // }
-
   //---- QUERY METHODS ----
 
   // private: // TODO: make it private again
 public:
+  /// method to get the node, that represents the neighborhood bin of a point.
   lsSmartPointer<treeNode> getBin(const point_type &pt, bool trace = false) const
   {
     lsSmartPointer<treeNode> thisNode = treeNodes.front();
@@ -663,7 +596,7 @@ public:
 
   nodes_vector &getTreeNodes() { return treeNodes; }
 
-  // iteratorType getNearestNeighbors(const point_type &point)
+  /// public interface for the neighborhood query (for a single point)
   template <class Point, class iteratorType = iterator>
   iteratorType getNearestNeighbors(const Point &point)
   {
@@ -713,10 +646,7 @@ public:
 
   void setMaxPointsPerBin(std::size_t newLimit) { this->maxPointsPerBin = newLimit; }
 
-  void setMeanMethod(lsInternal::meanEnum newMethod)
-  {
-    meanMethod = newMethod;
-  }
+  void setBestSplitMode(bool newBestSplitMode) { this->useBestSplit = newBestSplitMode; }
 
   /// Reconfigure the trees parameters.
   ///
@@ -756,7 +686,7 @@ public:
 
   const std::string getTreeType() { return tree_type; }
 
-  /// prints parameters
+  /// prints parameters of the tree
   void printInfo()
   {
     std::cout << getTreeType() << std::endl;
@@ -770,6 +700,43 @@ public:
               << " --> largestBinSize: " << largestBinSize << std::endl;
   }
 
+  /// prints the tree to console
+  void printBT(bool printPoints = false)
+  {
+    if (frozen)
+      printBT("", treeNodes[0], false, printPoints);
+  }
+
+  /// dumps the points in the leaf nodes into a python file for easy import and visualization (it's a pretty cheap and dirty way!)
+  void dumpBins(std::ostream &os = std::cout) const
+  {
+    unsigned idx = 0;
+    os << "bins = []\n";
+    for (auto bin = treeNodes.begin() + startLeafs; bin != treeNodes.end(); ++bin)
+    {
+      os << "# bin#: " << idx++ << "\n";
+      os << "bins.append([";
+      printPointsInNode(*bin, os);
+      os << "])\n";
+    }
+    os << std::endl;
+  }
+
+  /// prints points in the node to console
+  void printPointsInNode(lsSmartPointer<treeNode> node, std::ostream &os = std::cout) const
+  {
+    auto &bin = data[node->leafNum];
+    for (auto &pt : bin)
+    {
+      lsInternal::print_point(pt, os);
+      os << ",";
+    }
+    os << std::endl;
+  }
+
+#pragma Private Methods
+private:
+  /// helper function that prints a tree node
   void printBT(const std::string &prefix, lsSmartPointer<treeNode> node,
                bool isLeft, bool printPoints)
   {
@@ -804,75 +771,50 @@ public:
     }
   }
 
-  // void printBT(const std::string &prefix, treeNode &node,
-  //              bool isLeft, printPoints)
-  // {
-  //   if (frozen)
-  //   {
-  //     lsSmartPointer<treeNode> nodePointer(&node);
-  //     printBT(nodePointer)
-  //     // std::cout << prefix;
-  //     // std::cout << (isLeft ? "├──" : "└──");
-
-  //     // if (node.identifier == "")
-  //     // {
-  //     //   std::string dim = "z";
-  //     //   if (node.dimensionToSplit() == Dim::y)
-  //     //     dim = "y";
-  //     //   if (node.dimensionToSplit() == Dim::x)
-  //     //     dim = "x";
-  //     //   std::cout << "(" << node.color << " / " << dim << " / " << node.median
-  //     //             << ")" << std::endl;
-  //     // }
-  //     // else
-  //     // {
-  //     //   std::cout << "(" << node.color << " / " << node.identifier << ")"
-  //     //             << std::endl;
-  //     // }
-
-  //     // // enter the next tree level - left and right branch
-  //     // printBT(prefix + (isLeft ? "│   " : "    "), node.left, true);
-  //     // printBT(prefix + (isLeft ? "│   " : "    "), node.right, false);
-  //   }
-  // }
-
-  void printBT(bool printPoints = false)
-  {
-    if (frozen)
-      printBT("", treeNodes[0], false, printPoints);
-  }
-
-  void dumpBins(std::ostream &os = std::cout) const
-  {
-    unsigned idx = 0;
-    os << "bins = []\n";
-    for (auto bin = treeNodes.begin() + startLeafs; bin != treeNodes.end(); ++bin)
-    {
-      os << "# bin#: " << idx++ << "\n";
-      os << "bins.append([";
-      printPointsInNode(*bin, os);
-      os << "])\n";
-    }
-    os << std::endl;
-  }
-
-  void printPointsInNode(lsSmartPointer<treeNode> node, std::ostream &os = std::cout) const
-  {
-    auto &bin = data[node->leafNum];
-    for (auto &pt : bin)
-    {
-      lsInternal::print_point(pt);
-      os << ",";
-    }
-    os << std::endl;
-  }
-
-#pragma Private Methods
-private:
   /*
    * ---- UTILITY METHODS ---- *
    */
 
+  /// it computes the dimension of the best split for a given data collection (given via iterators), i.e. looks for the dimension with the largest span.
+  template <typename It>
+  unsigned computeNextBestSplitDimension(It begin, It end) const
+  {
+
+    std::array<std::array<value_type, 2>, D> limits;
+    // fill with (lowest value, highest value) - pairs --> depends on D!
+    limits.fill(std::array<value_type, 2>{std::numeric_limits<value_type>::max(), std::numeric_limits<value_type>::lowest()});
+
+    for (auto &idx = begin; idx != end; ++idx)
+    {
+      auto &point = data[0][*idx];
+      for (unsigned dim = 0; dim < D; ++dim)
+      {
+        limits[dim][0] = (point[dim] < limits[dim][0]) ?: limits[dim][0];
+        limits[dim][1] = (point[dim] < limits[dim][1]) ?: limits[dim][1];
+      }
+    }
+
+    std::array<value_type, D> spans;
+    // fill with (lowest value, highest value) - pairs --> depends on D!
+    spans.fill(std::numeric_limits<value_type>::min());
+    for (unsigned dim = 0; dim < D; ++dim)
+    {
+      spans[dim] = limits[dim][1] - limits[dim][0];
+    }
+
+    auto cmp = [](const value_type &a, const value_type &b)
+    {
+      return (std::abs(a) < std::abs(b));
+    };
+
+    auto result = std::max_element(spans.begin(), spans.end(), cmp);
+    unsigned highest = std::distance(spans.begin(), result);
+
+    return highest;
+  }
+
+  /// applies the "color" (value between [-numBins, +numBins]) to the nodes.
+  /// This information is for Debugging only and has no other use.
   void applyColorToNodes()
   {
     int b0 = numBins;
@@ -892,44 +834,15 @@ private:
       colorChild(node->right, node->color, b0, false);
   };
 
-  /// Sorts a vector (range) by the order given by second vector.
-  /// The second vector contains the sorted list of indices of the first.
-  /// Elements of the first, that are not present in the second,
-  /// are pushed to the end.
-  ///
-  /// Example
-  /// x: 0, 5, 3, 2, 1, 6, 4, 7,
-  /// y: 5, 1, 0, 4, 6, 3, 7, 2
-  /// z: 7, 3, 5, 2, 1, 4, 0, 6,
-  /// L1(by x): sortedList = [0, 5,  3, 2] [1, 6,  4, 7]
-  /// L2(by y): sortedList = [5, 0] [3, 2] [1, 4] [6, 7]
-  /// L3(by z): sortedList = [5][0] [3][2] [1][4] [7][6]
-  /// order = [1,4,6,2]
-  template <class It, class It2>
-  void sortByIdxRange(It begin, It end, It2 beginSortBy, It2 endSortBy)
-  {
-    std::sort(begin, end, [beginSortBy, endSortBy](auto left, auto right)
-              {
-                // sort in ascending order
-                for (auto iterator_to_sorted_data = beginSortBy;
-                     iterator_to_sorted_data < endSortBy; ++iterator_to_sorted_data)
-                {
-                  if (*iterator_to_sorted_data == left)
-                    return true; // switch order of left and right
-                  if (*iterator_to_sorted_data == right)
-                    return false; // left and right are already ordered correctly
-                }
-                return false; // neither could be found...should this give an error?
-              });
-  }
-
+  /// sorts a range of data in a certain dimension
+  /// begin, end are iterators over the array of indices for the final ordering!
   template <class It>
   void sortByDim(It begin, It end, uint dim)
   {
     std::sort(begin, end, [this, &dim](const auto &left, const auto &right)
               {
+                // return data[0][left][dim] > data[0][right][dim];
                 return data[0][left][dim] < data[0][right][dim];
-                // false...switch order of left and right });
               });
   }
 
@@ -1010,16 +923,6 @@ private:
     }
     data = std::move(result);
   }
-
-private:
-  inline size_type getRoot(size_type treeNode)
-  {
-    return std::ceil((double)treeNode / 2) - (1);
-  }
-
-  inline size_type getLeftChild(size_type treeNode) { return treeNode * 2 + 1; }
-
-  inline size_type getRightChild(size_type treeNode) { return treeNode * 2 + 2; }
 }; // end class lsTree
 
 #endif // LS_TREE

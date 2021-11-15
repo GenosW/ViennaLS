@@ -22,7 +22,7 @@ namespace lsInternal
 
     Dimension() = default;
     Dimension(Dimension const &) = default;
-    Dimension(enum_type init) : value(options(init)) {}
+    Dimension(enum_type init) : value(options(init + 1)) {}
 
     Dimension &operator=(Dimension other)
     {

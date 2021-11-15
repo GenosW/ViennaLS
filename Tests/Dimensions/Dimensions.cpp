@@ -17,7 +17,7 @@ uint testDimension(void)
   std::vector<uint> shouldBe;
 
   // test forward iteration
-  Dim dim = Dim(1);
+  Dim dim = Dim(0);
   std::cout << "Iterate (++): " << dim;
   if constexpr (D == 3)
     shouldBe = std::vector<uint>{1, 2, 0};
@@ -37,7 +37,7 @@ uint testDimension(void)
   LSTEST_ASSERT(dim2 != dim);
 
   // test backward iteration
-  dim = Dim(D);
+  dim = Dim(D - 1);
   std::cout << "Iterate (--): " << dim;
   if constexpr (D == 3)
     shouldBe = std::vector<uint>{1, 0, 2};
@@ -61,7 +61,7 @@ uint testDimension(void)
   std::cout << "Assign from uint (expected: y == 1)" << std::endl;
   Dim dim3 = initDim; // y
 
-  uint shouldBeThis = 1; // minus 1 included
+  uint shouldBeThis = 2;
   std::cout << "implicit to uint: " << dim3 << " == " << shouldBeThis
             << std::endl;
   LSTEST_ASSERT(dim3 == shouldBeThis)

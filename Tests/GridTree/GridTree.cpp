@@ -1,9 +1,11 @@
 // STL
 #include <iostream>
 #include <vector>
+#include <fstream>
 
 // ViennaHRLE
 // ViennaLS
+#include <lsBooleanOperation.hpp>
 #include <lsDomain.hpp>
 #include <lsMakeGeometry.hpp>
 #include <lsTestAsserts.hpp>
@@ -15,11 +17,14 @@
 #include <lsVTKWriter.hpp>
 
 #define DEBUG_INFO
+#undef DEBUG_INFO
+
+//--- Helper functions for this test
 
 template <typename T>
 bool isInBounds(const T &value, const T &low, const T &high)
 {
-  return (value >= low) && (value < high);
+  return (low <= value) && (value <= high);
 }
 
 template <int D>
@@ -47,7 +52,7 @@ uint checkTree(lsTree<double, D> treeToCheck, size_t N)
     // std::endl;
     ptsInTree[node->level] += node->size();
     // Check if node was split in correct dimension
-    LSTEST_ASSERT(node->dimensionToSplit == orderOfDims[node->level]);
+    // LSTEST_ASSERT(node->dimensionToSplit == orderOfDims[node->level]);
   }
   // Check if all points were sorted and are present in each level of tree
   LSTEST_ASSERT(std::all_of(ptsInTree.cbegin(), ptsInTree.cend(),
@@ -80,8 +85,9 @@ void printNodeInfo(nodePointer node)
   std::cout << "    median: " << node->dimensionToSplit << " = " << node->median << std::endl;
 }
 
+// query a tree with a point. An expected range of the output (in terms of the nodes color) has to specified for the test to succeed.
 template <class T, int D, class container>
-void queryTree(lsTree<T, D> tree, container point, int expectedBot, int expectedTop, std::string name)
+bool queryTree(lsTree<T, D> tree, container point, int expectedBot, int expectedTop, std::string name)
 {
 
   bool trace = true;
@@ -91,21 +97,25 @@ void queryTree(lsTree<T, D> tree, container point, int expectedBot, int expected
   std::cout << "Getting neighborhood for point: " << name << point << "\n";
   auto neighborhood = tree.getBin(point, trace);
   printNodeInfo(neighborhood);
+  bool checkResult = false;
   if (expectedBot != 0 && expectedTop != 0)
   {
-    bool checkResult = isInBounds(neighborhood->color, expectedBot, expectedTop);
+    checkResult = isInBounds(neighborhood->color, expectedBot, expectedTop);
     std::cout << "    ("
               << expectedBot << " <= " << neighborhood->color
               << " <= " << expectedTop << "): " << checkResult << std::endl;
   }
+  return checkResult;
 }
+
+//--- (Unit) Tests
+// Additional debug output (to console) can be activated for debugging purposes.
 
 template <int D>
 uint testTreeWithSphere(void)
 {
-  // constexpr int D = Dim;
   std::cout << "D: " << D << std::endl;
-  const std::string prefix = "meshes/sphere/" + std::to_string(D) + "D";
+  const std::string prefix = "meshes/sphere/_" + std::to_string(D) + "D";
 
   lsInternal::setup_omp(4);
 
@@ -137,42 +147,46 @@ uint testTreeWithSphere(void)
   top[D - 1] += radius;
 
   // Compute lsTree of volumetric mesh
-  //   lsTree<double, D> tree(mesh);
-  //   // tree.setMeanMethod(lsInternal::meanEnum::HARMONIC);
-  //   tree.apply();
-  //   // Debug tools
-  //   tree.addColor(mesh); // TODO: Wrap in creation of mesh based on lsTree.data nodes
-  //   lsVTKWriter(mesh, lsFileFormatEnum::VTU, prefix + "_TreeMesh").apply();
-  // #ifdef DEBUG_INFO
-  //   tree.printBT();
-  //   tree.dumpBins();
-  // #endif
-  //   // EVALUATE
+  lsTree<double, D> tree(mesh);
+  tree.setBestSplitMode(true);
+  tree.apply();
+  // Debug tools
+  tree.addColor(mesh); // TODO: Wrap in creation of mesh based on lsTree.data nodes
+  lsVTKWriter(mesh, lsFileFormatEnum::VTU, prefix + "_TreeMesh").apply();
+#ifdef DEBUG_INFO
+  {
+    // tree.printBT();
+    std::ofstream dumpFile(prefix + "_Tree.py");
+    tree.dumpBins(dumpFile);
+  }
+#endif
+  // EVALUATE
 
-  //   checkTree(tree, N);
+  checkTree(tree, N);
 
-  //   showTreeRange(tree);
+  showTreeRange(tree);
 
-  //   queryTree(tree, top, 7, 7, "top");
-  //   queryTree(tree, left, -11, -11, "left");
+  bool pass_dense = true;
+  pass_dense = pass_dense && queryTree(tree, top, 7, 7, "top");
+  pass_dense = pass_dense && queryTree(tree, left, -15, -15, "left");
 
-  //   using treeNode = typename lsTree<double, D>::treeNode;
+  using treeNode = typename lsTree<double, D>::treeNode;
 
-  //   auto print_node = [&tree](lsSmartPointer<treeNode> &bin)
-  //   {
-  //     for (auto it = bin->begin(tree); it != bin->end(tree); ++it)
-  //     {
-  //       lsInternal::print_point(*it);
-  //       std::cout << endl;
-  //     };
-  //   };
+  auto print_node = [&tree](lsSmartPointer<treeNode> &bin)
+  {
+    for (auto it = bin->begin(tree); it != bin->end(tree); ++it)
+    {
+      lsInternal::print_point(*it);
+      std::cout << endl;
+    };
+  };
 
   // lsSmartPointer<treeNode> bin = tree.getBin(top);
   // print_node(bin);
 
-  // auto &treeNodes = tree.getTreeNodes();
-  // auto size = treeNodes.size();
-  // auto numberOfLeafs = tree.getNumberOfLeafs();
+  auto &treeNodes = tree.getTreeNodes();
+  auto size = treeNodes.size();
+  auto numberOfLeafs = tree.getNumberOfLeafs();
 
   // for (auto binIterator = treeNodes.begin() + (size - numberOfLeafs); binIterator != treeNodes.end(); ++binIterator)
   // {
@@ -191,28 +205,36 @@ uint testTreeWithSphere(void)
 
   auto tree2 = lsTree<double, D>(mesh);
   tree2.apply();
+  tree2.setBestSplitMode(true);
   tree2.addColor(mesh);
   lsVTKWriter(mesh, lsFileFormatEnum::VTU, prefix + "_TreeDiskMesh").apply();
 #ifdef DEBUG_INFO
-  tree2.printBT();
-  tree2.dumpBins();
+  {
+    // tree2.printBT();
+    std::ofstream dumpFile(prefix + "_TreeDisk.py");
+    tree2.dumpBins(dumpFile);
+  }
 #endif
 
   checkTree(tree2, N2);
 
   showTreeRange(tree2);
-  queryTree(tree2, top, -15, 15, "top");
-  queryTree(tree2, left, -15, -15, "left");
+  bool pass_disk = true;
+  pass_disk = pass_disk && queryTree(tree2, top, 7, 9, "top");
+  pass_disk = pass_disk && queryTree(tree2, left, -15, -15, "left");
+
+  // lsSmartPointer<treeNode> bin = tree2.getBin(left);
+  // print_node(bin);
 
   // PASS!
-  return 1;
+  return pass_disk && pass_dense;
 };
 
 template <int D>
 uint testTreeWithBox(void)
 {
   std::cout << "D: " << D << std::endl;
-  const std::string prefix = "meshes/box/" + std::to_string(D) + "D";
+  const std::string prefix = "meshes/box/_" + std::to_string(D) + "D";
 
   lsInternal::setup_omp(4);
 
@@ -256,8 +278,11 @@ uint testTreeWithBox(void)
   tree.addColor(mesh);
   lsVTKWriter(mesh, lsFileFormatEnum::VTU, prefix + "_TreeMesh").apply();
 #ifdef DEBUG_INFO
-  tree.printBT();
-  tree.dumpBins();
+  {
+    // tree.printBT();
+    std::ofstream dumpFile(prefix + "_TreeDiskBins.py");
+    tree.dumpBins(dumpFile);
+  }
 #endif
 
   // EVALUATE
@@ -281,8 +306,11 @@ uint testTreeWithBox(void)
   tree2.addColor(mesh);
   lsVTKWriter(mesh, lsFileFormatEnum::VTU, prefix + "_TreeDiskMesh").apply();
 #ifdef DEBUG_INFO
-  tree2.printBT();
-  tree2.dumpBins();
+  {
+    // tree2.printBT();
+    std::ofstream dumpFile(prefix + "_TreeDiskBins.py");
+    tree2.dumpBins(dumpFile);
+  }
 #endif
 
   checkTree(tree2, N2);
@@ -295,26 +323,95 @@ uint testTreeWithBox(void)
   return 1;
 };
 
+template <int D>
+uint testTreeWithFrosty(void)
+{
+  std::cout << "D: " << D << std::endl;
+  const std::string prefix = "meshes/frosty/_" + std::to_string(D) + "D";
+
+  lsInternal::setup_omp(4);
+
+  // Setup reference geometry
+  auto sphere1 = lsSmartPointer<lsDomain<double, D>>::New();
+  auto sphere2 = lsSmartPointer<lsDomain<double, D>>::New();
+  auto mesh = lsSmartPointer<lsMesh<>>::New();
+
+  // Generate spheres
+  double radius1 = 10.;
+  double radius2 = 5.;
+  // hrleVectorType<double, D> centre1(5., 0.);
+  // hrleVectorType<double, D> centre2(14., 0.);
+  double centre1[3] = {5., 0., 0};
+  double centre2[3] = {5., 0., 0};
+  centre2[D - 1] = 14.;
+  // hrleVectorType<double, D> centre2(14., 0.);
+
+  lsMakeGeometry<double, D>(
+      sphere1, lsSmartPointer<lsSphere<double, D>>::New(centre1, radius1))
+      .apply();
+  lsMakeGeometry<double, D>(
+      sphere2, lsSmartPointer<lsSphere<double, D>>::New(centre2, radius2))
+      .apply();
+
+  // Perform boolean operations to join sphere
+  lsBooleanOperation<double, D>(sphere1, sphere2,
+                                lsBooleanOperationEnum::UNION)
+      .apply();
+
+  size_t N = sphere1->getDomain().getNumberOfPoints();
+
+  std::cout << "N: " << N << std::endl;
+
+  // --- Volumetric mesh
+  std::cout << "--- Mesh: " << std::endl;
+  lsToMesh<double, D>(sphere1, mesh).apply();
+  // lsToMesh<double, D>(sphere2, mesh).apply();
+  // lsToSurfaceMesh<double, D>(sphere1, mesh).apply();
+  // lsToSurfaceMesh<double, D>(sphere2, mesh).apply();
+  // lsVTKWriter<double>(mesh, lsFileFormatEnum::VTU, prefix + "_Mesh").apply();
+
+  // Get reference geometry parameters
+  LSTEST_ASSERT(mesh->getNodes().size() == N);
+
+  return true;
+};
+
 int main(int argc, char **argv)
 {
   uint test_2d_sphere = 0;
   uint test_3d_sphere = 0;
   uint test_2d_box = 0;
   uint test_3d_box = 0;
+  uint test_2d_frosty = 0;
+  uint test_3d_frosty = 0;
 
   std::cout << "############### SPHERE ##############" << std::endl;
+  std::cout << "----------------- 2D ----------------" << std::endl;
   test_2d_sphere = testTreeWithSphere<2>();
-  std::cout << "------------- NEXT TEST -------------" << std::endl;
-  // test_3d_sphere = testTreeWithSphere<3>();
+  std::cout << "----------------- 3D ----------------" << std::endl;
+  test_3d_sphere = testTreeWithSphere<3>();
   // std::cout << "################ BOX ################" << std::endl;
+  // std::cout << "----------------- 2D ----------------" << std::endl;
   // test_2d_box = testTreeWithBox<2>();
-  // std::cout << "------------- NEXT TEST -------------" << std::endl;
+  // std::cout << "----------------- 3D ----------------" << std::endl;
   // test_3d_box = testTreeWithBox<3>();
+  // std::cout << "############### FROSTY ##############" << std::endl;
+  // std::cout << "----------------- 2D ----------------" << std::endl;
+  // test_2d_frosty = testTreeWithFrosty<2>();
+  // std::cout << "----------------- 3D ----------------" << std::endl;
+  // test_3d_frosty = testTreeWithFrosty<3>();
 
   std::cout << "------------- RESUMÉ -------------" << std::endl;
+  std::cout << "test_2d_sphere: " << test_2d_sphere;
+  std::cout << "\ntest_3d_sphere: " << test_3d_sphere;
+  std::cout << "\ntest_2d_box:    " << test_2d_box;
+  std::cout << "\ntest_3d_box:    " << test_3d_box;
+  std::cout << "\ntest_2d_frosty:    " << test_2d_frosty;
+  std::cout << "\ntest_3d_frosty:    " << test_3d_frosty << std::endl;
 
   if (lsInternal::all(test_2d_sphere, test_3d_sphere,
-                      test_2d_box, test_3d_box))
+                      test_2d_box, test_3d_box,
+                      test_2d_frosty, test_3d_frosty))
     std::cout << "Test " << argv[0] << ": SUCCESS!";
   else
     std::cout << "Test " << argv[0] << ": FAILURE!";
